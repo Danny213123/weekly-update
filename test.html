@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monthly Report Generator v6</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <style>
+        /* Force a standard font for consistency in screenshots */
+        .export-font {
+            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #1f2937;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #4b5563;
+            border-radius: 4px;
+        }
+
+        .bg-grid-pattern {
+            background-image: linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        input,
+        textarea,
+        select {
+            background-color: #374151;
+            border: 1px solid #4b5563;
+            color: white;
+            padding: 0.5rem;
+            border-radius: 0.25rem;
+            width: 100%;
+            font-size: 0.875rem;
+        }
+
+        input:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #38bdf8;
+        }
+
+        label {
+            display: block;
+            font-size: 0.75rem;
+            color: #9ca3af;
+            margin-bottom: 0.25rem;
+            margin-top: 0.75rem;
+        }
+
+        h3 {
+            color: #38bdf8;
+            font-weight: bold;
+            margin-top: 1.5rem;
+            border-bottom: 1px solid #374151;
+            padding-bottom: 0.5rem;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .section-group {
+            background: rgba(31, 41, 55, 0.5);
+            padding: 10px;
+            border: 1px solid #4b5563;
+            border-radius: 6px;
+            margin-bottom: 10px;
+        }
+
+        .remove-btn {
+            color: #f87171;
+            font-size: 0.7rem;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+
+        .add-btn {
+            width: 100%;
+            background-color: #334155;
+            color: #e2e8f0;
+            font-size: 0.8rem;
+            padding: 0.5rem;
+            border-radius: 0.25rem;
+            border: 1px dashed #64748b;
+            margin-top: 0.5rem;
+            transition: background 0.2s;
+        }
+
+        .add-btn:hover {
+            background-color: #475569;
+        }
+
+        /* Pre-define KPI card color styles for proper export */
+        .kpi-blue {
+            background: linear-gradient(to bottom, #dbeafe, #bfdbfe);
+        }
+
+        .kpi-blue .kpi-title {
+            color: #1e3a8a;
+        }
+
+        .kpi-teal {
+            background: linear-gradient(to bottom, #ccfbf1, #99f6e4);
+        }
+
+        .kpi-teal .kpi-title {
+            color: #134e4a;
+        }
+
+        .kpi-orange {
+            background: linear-gradient(to bottom, #ffedd5, #fed7aa);
+        }
+
+        .kpi-orange .kpi-title {
+            color: #7c2d12;
+        }
+
+        .kpi-indigo {
+            background: linear-gradient(to bottom, #e0e7ff, #c7d2fe);
+        }
+
+        .kpi-indigo .kpi-title {
+            color: #312e81;
+        }
+
+        .kpi-purple {
+            background: linear-gradient(to bottom, #f3e8ff, #e9d5ff);
+        }
+
+        .kpi-purple .kpi-title {
+            color: #581c87;
+        }
+
+        .kpi-pink {
+            background: linear-gradient(to bottom, #fce7f3, #fbcfe8);
+        }
+
+        .kpi-pink .kpi-title {
+            color: #831843;
+        }
+
+        .kpi-green {
+            background: linear-gradient(to bottom, #dcfce7, #bbf7d0);
+        }
+
+        .kpi-green .kpi-title {
+            color: #14532d;
+        }
+
+        .kpi-red {
+            background: linear-gradient(to bottom, #fee2e2, #fecaca);
+        }
+
+        .kpi-red .kpi-title {
+            color: #7f1d1d;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-900 h-screen flex overflow-hidden font-sans text-white">
+
+    <aside class="w-1/3 min-w-[400px] bg-gray-800 border-r border-gray-700 flex flex-col h-full z-10 shadow-xl">
+        <div class="p-4 border-b border-gray-700 bg-gray-900">
+            <h1 class="text-xl font-bold text-cyan-400">Dashboard Builder</h1>
+            <p class="text-xs text-gray-400">v8</p>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-4 space-y-4">
+
+            <h3>State Management</h3>
+            <div class="grid grid-cols-2 gap-2 mb-4">
+                <button onclick="saveState()"
+                    class="bg-green-600 hover:bg-green-500 text-white py-2 rounded text-xs font-bold">Save
+                    State</button>
+                <button onclick="clearHistory()"
+                    class="bg-red-900 hover:bg-red-800 text-white py-2 rounded text-xs font-bold">Clear History</button>
+            </div>
+
+            <h4 class="text-xs uppercase font-bold text-gray-500 mb-2">History</h4>
+            <div id="history-list" class="space-y-2 text-xs text-gray-400 max-h-[150px] overflow-auto"></div>
+
+            <h3>KPI Cards</h3>
+            <div id="kpi-inputs"></div>
+            <button onclick="addItem('kpi')" class="add-btn">+ Add KPI Card</button>
+
+            <h3>Highlights</h3>
+            <div class="section-group">
+                <label>Big Stat (Total Blogs)</label>
+                <input type="number" id="big-stat-input" oninput="updateBigStat()" value="13">
+            </div>
+            <div id="highlight-inputs"></div>
+            <button onclick="addItem('highlight')" class="add-btn">+ Add Highlight Point</button>
+
+            <h3>Blogs</h3>
+            <div id="blog-inputs"></div>
+            <button onclick="addItem('blog')" class="add-btn">+ Add Blog Post</button>
+
+            <h3>Demographics</h3>
+            <div id="demo-inputs"></div>
+            <button onclick="addItem('demo')" class="add-btn">+ Add Demographic</button>
+
+        </div>
+
+        <div class="p-4 border-t border-gray-700 bg-gray-900 grid grid-cols-2 gap-4">
+            <button onclick="downloadPNG()"
+                class="bg-cyan-600 hover:bg-cyan-500 text-white py-2 rounded font-bold shadow-lg">Download PNG</button>
+            <button onclick="downloadPDF()"
+                class="bg-indigo-600 hover:bg-indigo-500 text-white py-2 rounded font-bold shadow-lg">Download
+                PDF</button>
+        </div>
+    </aside>
+
+    <main class="flex-1 bg-black p-8 flex justify-center items-start overflow-auto bg-grid-pattern h-full">
+
+        <div id="dashboard-preview"
+            class="export-font w-[1100px] bg-gray-900 text-white p-1 shadow-2xl border border-gray-700">
+
+            <div id="kpi-preview-container" class="grid gap-1 mb-1 text-center"
+                style="grid-template-columns: repeat(4, 1fr);">
+            </div>
+
+            <div class="grid grid-cols-12 gap-1 min-h-[400px]">
+
+                <div class="col-span-5 flex flex-col gap-1">
+                    <div
+                        style="background: linear-gradient(to bottom right, #334155, #1e293b); padding: 24px; text-align: center; border-radius: 2px; border: 1px solid #4b5563; height: 140px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                        <div id="big-stat-display"
+                            style="font-size: 72px; font-weight: 700; color: white; line-height: 1;">13</div>
+                        <div
+                            style="font-size: 14px; font-weight: 700; color: #bfdbfe; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px;">
+                            Total Blogs Released</div>
+                    </div>
+
+                    <div
+                        class="bg-slate-800 p-5 rounded-sm border border-gray-600 flex-1 text-sm leading-relaxed flex flex-col">
+                        <div class="flex items-center gap-2 mb-3 border-b border-gray-600 pb-2">
+                            <div class="w-2 h-6 bg-blue-500 rounded-sm"></div>
+                            <span class="font-bold text-blue-300 uppercase tracking-widest">Monthly Highlights</span>
+                        </div>
+                        <div id="highlight-preview-list" class="space-y-3 text-gray-300 pl-2">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-span-7 flex flex-col gap-1">
+
+                    <div class="bg-gray-100 text-gray-900 rounded-sm flex-1 border border-gray-300 flex flex-col">
+                        <div
+                            class="bg-slate-600 text-white text-xs font-bold p-3 flex justify-between items-center uppercase">
+                            <span>New Monthly Blogs Traffic</span>
+                            <span class="opacity-50 text-[10px]">Sorted by Views</span>
+                        </div>
+                        <div id="blog-preview-list" class="text-sm bg-white">
+                        </div>
+                    </div>
+
+                    <div class="bg-gray-100 text-gray-900 rounded-sm h-fit border border-gray-300">
+                        <div class="bg-slate-500 text-white text-xs font-bold p-2 px-3 uppercase">Top Demographics</div>
+                        <div id="demo-preview-grid"
+                            class="grid grid-cols-3 divide-x divide-y divide-gray-300 text-xs text-center bg-white border-t border-gray-300">
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // --- DATA STATE ---
+        const colors = ['blue', 'teal', 'orange', 'indigo', 'purple', 'pink', 'green', 'red'];
+
+        const state = {
+            kpis: [
+                { title: "Active Users", prev: 3800, curr: 4200 },
+                { title: "New Users", prev: 3000, curr: 2400 },
+                { title: "Search Views", prev: 12000, curr: 13600 },
+                { title: "Social Views", prev: 2000, curr: 2200 }
+            ],
+            highlights: [
+                "Month-over-month user activity has grown significantly due to organic search optimization.",
+                "New user acquisitions saw a slight dip, but returning users increased by 8.5%.",
+                "Community outreach programs are scheduled to boost engagement in Q3."
+            ],
+            blogs: [
+                { title: "Power Up Qwen 3 with AMD", url: "#", views: "6.5K" },
+                { title: "Llama 4 Developer Quickstart", url: "#", views: "1.5K" },
+                { title: "Supercharge DeepSeek-R1", url: "#", views: "1.3K" }
+            ],
+            demographics: [
+                { country: "USA", val: "3.8K" },
+                { country: "China", val: "1.1K" },
+                { country: "Russia", val: "0.9K" }
+            ]
+        };
+
+        // --- RENDER FUNCTIONS ---
+
+        // 1. KPIs (Fixed: uses CSS classes instead of dynamic Tailwind)
+        function renderKPIs() {
+            // Inputs
+            const inputContainer = document.getElementById('kpi-inputs');
+            inputContainer.innerHTML = '';
+            state.kpis.forEach((kpi, i) => {
+                const div = document.createElement('div');
+                div.className = "section-group relative";
+                div.innerHTML = `
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="!mt-0 font-bold text-xs uppercase text-cyan-500">KPI ${i + 1}</label>
+                        <span onclick="removeItem('kpi', ${i})" class="remove-btn">Remove</span>
+                    </div>
+                    <input type="text" value="${kpi.title}" oninput="updateState('kpi', ${i}, 'title', this.value)" class="mb-2" placeholder="Title">
+                    <div class="grid grid-cols-2 gap-2">
+                        <input type="number" value="${kpi.prev}" oninput="updateState('kpi', ${i}, 'prev', this.value)" placeholder="Prev">
+                        <input type="number" value="${kpi.curr}" oninput="updateState('kpi', ${i}, 'curr', this.value)" placeholder="Curr">
+                    </div>
+                `;
+                inputContainer.appendChild(div);
+            });
+
+            // Preview
+            const previewContainer = document.getElementById('kpi-preview-container');
+            previewContainer.innerHTML = '';
+
+            const colCount = Math.min(state.kpis.length, 6) || 1;
+            previewContainer.style.gridTemplateColumns = `repeat(${colCount}, 1fr)`;
+
+            state.kpis.forEach((kpi, i) => {
+                const color = colors[i % colors.length];
+
+                let pctText = "N/A";
+                let pctStyle = "background-color: #e5e7eb; color: #4b5563;";
+                const prev = parseFloat(kpi.prev);
+                const curr = parseFloat(kpi.curr);
+
+                if (prev > 0) {
+                    const change = ((curr - prev) / prev) * 100;
+                    pctText = (change > 0 ? "+" : "") + change.toFixed(1) + "%";
+                    pctStyle = change >= 0
+                        ? "background-color: rgba(34, 197, 94, 0.25); color: #166534;"
+                        : "background-color: rgba(239, 68, 68, 0.25); color: #991b1b;";
+                }
+
+                const card = document.createElement('div');
+                // Use predefined CSS classes instead of dynamic Tailwind
+                card.className = `kpi-${color}`;
+                card.style.cssText = "color: #111827; padding: 16px; border-radius: 2px; text-align: center; display: flex; flex-direction: column; justify-content: center; min-height: 80px;";
+                card.innerHTML = `
+                    <div class="kpi-title" style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.7; margin-bottom: 4px;">${kpi.title}</div>
+                    <div style="font-size: 28px; font-weight: 800; color: #111827; line-height: 1;">${curr.toLocaleString()}</div>
+                    <div style="margin-top: 6px;">
+                        <span style="font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; white-space: nowrap; ${pctStyle}">${pctText}</span>
+                    </div>
+                `;
+                previewContainer.appendChild(card);
+            });
+        }
+
+        // 2. Highlights (Fixed Bullet Rendering)
+        function renderHighlights() {
+            // Inputs
+            const inputContainer = document.getElementById('highlight-inputs');
+            inputContainer.innerHTML = '';
+            state.highlights.forEach((text, i) => {
+                const div = document.createElement('div');
+                div.className = "section-group";
+                div.innerHTML = `
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="!mt-0">Point ${i + 1}</label>
+                        <span onclick="removeItem('highlight', ${i})" class="remove-btn">Remove</span>
+                    </div>
+                    <textarea rows="2" oninput="updateState('highlight', ${i}, null, this.value)">${text}</textarea>
+                `;
+                inputContainer.appendChild(div);
+            });
+
+            // Preview
+            const previewList = document.getElementById('highlight-preview-list');
+            previewList.innerHTML = '';
+            state.highlights.forEach(text => {
+                const row = document.createElement('div');
+                // Use flexbox instead of list-item to guarantee rendering in screenshot
+                row.className = "flex items-start gap-3";
+                row.innerHTML = `
+                    <span class="text-xl leading-none text-blue-400" style="margin-top: -2px;">&bull;</span>
+                    <span class="leading-relaxed text-gray-300">${text}</span>
+                `;
+                previewList.appendChild(row);
+            });
+        }
+
+        // 3. Blogs (Fixed text clipping)
+        function renderBlogs() {
+            // Inputs
+            const inputContainer = document.getElementById('blog-inputs');
+            inputContainer.innerHTML = '';
+            state.blogs.forEach((blog, i) => {
+                const div = document.createElement('div');
+                div.className = "section-group";
+                div.innerHTML = `
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="!mt-0 font-bold text-xs uppercase">Blog ${i + 1}</label>
+                        <span onclick="removeItem('blog', ${i})" class="remove-btn">Remove</span>
+                    </div>
+                    <input type="text" value="${blog.title}" oninput="updateState('blog', ${i}, 'title', this.value)" class="mb-2" placeholder="Title">
+                    <input type="text" value="${blog.views}" oninput="updateState('blog', ${i}, 'views', this.value)" placeholder="Views">
+                `;
+                inputContainer.appendChild(div);
+            });
+
+            // Preview
+            const previewList = document.getElementById('blog-preview-list');
+            previewList.innerHTML = '';
+            state.blogs.forEach((blog, i) => {
+                const div = document.createElement('div');
+                const bgColor = i % 2 === 0 ? '#ffffff' : '#f9fafb';
+                // Fixed: use inline styles with extra padding for descenders
+                div.style.cssText = `display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background-color: ${bgColor}; border-bottom: 1px solid #d1d5db;`;
+                div.innerHTML = `
+                    <span style="font-weight: 600; color: #1d4ed8; font-size: 13px; line-height: 1.6;">${blog.title}</span>
+                    <span style="font-weight: 700; background-color: #e5e7eb; padding: 4px 8px; border-radius: 4px; font-size: 11px; color: #1f2937; white-space: nowrap; margin-left: 12px; flex-shrink: 0;">${blog.views}</span>
+                `;
+                previewList.appendChild(div);
+            });
+        }
+
+        // 4. Demographics
+        function renderDemographics() {
+            // Inputs
+            const inputContainer = document.getElementById('demo-inputs');
+            inputContainer.innerHTML = '';
+            state.demographics.forEach((demo, i) => {
+                const div = document.createElement('div');
+                div.className = "section-group grid grid-cols-2 gap-2 items-end";
+                div.innerHTML = `
+                    <div class="col-span-2 flex justify-between">
+                         <label class="!mt-0 font-bold text-xs">Region ${i + 1}</label>
+                         <span onclick="removeItem('demo', ${i})" class="remove-btn">Remove</span>
+                    </div>
+                    <input type="text" value="${demo.country}" oninput="updateState('demo', ${i}, 'country', this.value)" placeholder="Country">
+                    <input type="text" value="${demo.val}" oninput="updateState('demo', ${i}, 'val', this.value)" placeholder="Value">
+                `;
+                inputContainer.appendChild(div);
+            });
+
+            // Preview
+            const previewGrid = document.getElementById('demo-preview-grid');
+            previewGrid.innerHTML = '';
+            state.demographics.forEach(demo => {
+                const div = document.createElement('div');
+                div.className = "p-3"; // increased padding
+                div.innerHTML = `
+                    <div class="font-bold text-gray-600 mb-1">${demo.country}</div>
+                    <div class="font-mono font-bold text-xl">${demo.val}</div>
+                `;
+                previewGrid.appendChild(div);
+            });
+        }
+
+        // --- CONTROLLER FUNCTIONS ---
+
+        function updateState(type, index, field, value) {
+            if (type === 'highlight') {
+                state.highlights[index] = value;
+                renderHighlights();
+            } else if (type === 'kpi') {
+                state.kpis[index][field] = value;
+                renderKPIs();
+            } else if (type === 'blog') {
+                state.blogs[index][field] = value;
+                renderBlogs();
+            } else if (type === 'demo') {
+                state.demographics[index][field] = value;
+                renderDemographics();
+            }
+        }
+
+        function addItem(type) {
+            if (type === 'kpi') {
+                state.kpis.push({ title: "New Metric", prev: 0, curr: 0 });
+                renderKPIs();
+            } else if (type === 'highlight') {
+                state.highlights.push("New highlight point...");
+                renderHighlights();
+            } else if (type === 'blog') {
+                state.blogs.push({ title: "New Blog Post", url: "#", views: "0.0K" });
+                renderBlogs();
+            } else if (type === 'demo') {
+                state.demographics.push({ country: "Region", val: "0.0K" });
+                renderDemographics();
+            }
+        }
+
+        function removeItem(type, index) {
+            if (confirm("Are you sure you want to remove this item?")) {
+                if (type === 'kpi') state.kpis.splice(index, 1);
+                if (type === 'highlight') state.highlights.splice(index, 1);
+                if (type === 'blog') state.blogs.splice(index, 1);
+                if (type === 'demo') state.demographics.splice(index, 1);
+
+                renderAll();
+            }
+        }
+
+        function updateBigStat() {
+            document.getElementById('big-stat-display').innerText = document.getElementById('big-stat-input').value;
+        }
+
+
+        // --- PERSISTENCE ---
+        const STORAGE_KEY = 'dashboard_v9_history';
+
+        function saveState() {
+            const history = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+            const timestamp = new Date().toLocaleString();
+
+            const snapshot = {
+                timestamp: timestamp,
+                data: JSON.parse(JSON.stringify(state)) // Deep copy
+            };
+
+            history.unshift(snapshot); // Add to top
+            if (history.length > 20) history.pop(); // Keep max 20
+
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+            renderHistory();
+            alert('State saved successfully!');
+        }
+
+        function loadState(index) {
+            if (!confirm("Load this state? Current unsaved changes will be lost.")) return;
+
+            const history = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+            if (history[index]) {
+                const loadedData = history[index].data;
+                // Update state object
+                state.kpis = loadedData.kpis;
+                state.highlights = loadedData.highlights;
+                state.blogs = loadedData.blogs;
+                state.demographics = loadedData.demographics;
+
+                renderAll();
+            }
+        }
+
+        function deleteState(index) {
+            if (!confirm("Delete this saved state?")) return;
+            const history = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+            history.splice(index, 1);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+            renderHistory();
+        }
+
+        function clearHistory() {
+            if (!confirm("Clear all history?")) return;
+            localStorage.removeItem(STORAGE_KEY);
+            renderHistory();
+        }
+
+        function renderHistory() {
+            const list = document.getElementById('history-list');
+            if (!list) return;
+
+            const history = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+            list.innerHTML = '';
+
+            if (history.length === 0) {
+                list.innerHTML = '<div class="italic opacity-50 p-2 text-center">No saved states</div>';
+                return;
+            }
+
+            history.forEach((item, i) => {
+                const div = document.createElement('div');
+                div.className = "flex justify-between items-center bg-gray-800 p-2 rounded border border-gray-700 hover:border-gray-500 transition-colors group";
+                div.innerHTML = `
+                    <div class="cursor-pointer flex-1" onclick="loadState(${i})">
+                        <div class="font-bold text-gray-300 group-hover:text-cyan-400">Save #${history.length - i}</div>
+                        <div class="text-[10px] opacity-70">${item.timestamp}</div>
+                    </div>
+                    <button onclick="deleteState(${i})" class="text-gray-600 hover:text-red-500 ml-2 px-1" title="Delete">×</button>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        // --- RENDER FUNCTIONS ---
+        // ... existing render functions ...
+
+        // Update renderAll to also render history
+        function renderAll() {
+            renderKPIs();
+            renderHighlights();
+            renderBlogs();
+            renderDemographics();
+            renderHistory();
+        }
+
+        /* ... rest of code ... */
+
+        window.onload = function () {
+            renderAll();
+        }
+
+        // --- EXPORT (Simplified Standard Usage) ---
+        function downloadPNG() {
+            const element = document.getElementById('dashboard-preview');
+            // Ensure scrolled to top to catch everything
+            window.scrollTo(0, 0);
+
+            html2canvas(element, {
+                scale: 3,
+                useCORS: true,
+                backgroundColor: '#111827',
+                logging: false, // Turn off logging for cleaner console
+                allowTaint: true
+            }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = 'monthly-update.png';
+                link.href = canvas.toDataURL('image/png');
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }).catch(err => {
+                console.error('PNG export failed:', err);
+                alert('Export failed. Check console for details.');
+            });
+        }
+
+        function downloadPDF() {
+            const { jsPDF } = window.jspdf;
+            const element = document.getElementById('dashboard-preview');
+            window.scrollTo(0, 0);
+
+            html2canvas(element, {
+                scale: 3,
+                useCORS: true,
+                backgroundColor: '#111827',
+                logging: false,
+                allowTaint: true
+            }).then(canvas => {
+                const imgData = canvas.toDataURL('image/png');
+
+                // Create landscape A4 PDF
+                const pdf = new jsPDF('l', 'mm', 'a4');
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = pdf.internal.pageSize.getHeight();
+
+                // Set dark background
+                pdf.setFillColor(17, 24, 39);
+                pdf.rect(0, 0, pdfWidth, pdfHeight, 'F');
+
+                // Determine image fit
+                const imgProps = pdf.getImageProperties(imgData);
+                const imgRatio = imgProps.width / imgProps.height;
+
+                // Margin 10mm
+                const margin = 10;
+                const availableWidth = pdfWidth - (margin * 2);
+                const availableHeight = pdfHeight - (margin * 2);
+
+                let finalWidth, finalHeight;
+
+                if (availableWidth / availableHeight > imgRatio) {
+                    finalHeight = availableHeight;
+                    finalWidth = finalHeight * imgRatio;
+                } else {
+                    finalWidth = availableWidth;
+                    finalHeight = finalWidth / imgRatio;
+                }
+
+                // Center
+                const x = (pdfWidth - finalWidth) / 2;
+                const y = (pdfHeight - finalHeight) / 2;
+
+                pdf.addImage(imgData, 'PNG', x, y, finalWidth, finalHeight);
+                pdf.save('monthly-update.pdf');
+            }).catch(err => {
+                console.error('PDF export failed:', err);
+                alert('Export failed. Check console for details.');
+            });
+        }
+    </script>
+</body>
+
+</html>
+```
