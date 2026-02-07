@@ -1,0 +1,919 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard Studio V2</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./app.css" />
+  </head>
+  <body class="v2-app">
+    <div class="app-shell">
+      <aside class="nav-rail panel-left" id="left-panel">
+        <div class="sidebar-header">
+          <div class="sidebar-title" id="sidebar-project-title">Dashboard Studio V2</div>
+          <div class="sidebar-subtitle">Workspace</div>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-label">Create</div>
+          <button class="nav-item" id="action-new-project" type="button">
+            <span class="nav-icon">＋</span>
+            <span>New thread</span>
+          </button>
+          <button class="nav-item" type="button">
+            <span class="nav-icon">▦</span>
+            <span>Automations</span>
+          </button>
+          <button class="nav-item" id="action-import-json" type="button">
+            <span class="nav-icon">⤓</span>
+            <span>Import JSON</span>
+          </button>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-label">Project</div>
+          <button class="nav-item active" type="button">
+            <span class="nav-icon">●</span>
+            <span>Dashboard Studio</span>
+          </button>
+          <div class="project-list compact">
+            <div class="project-items" id="project-list"></div>
+          </div>
+        </div>
+        <div class="sidebar-footer">
+          <button class="nav-item" type="button">
+            <span class="nav-icon">⚙</span>
+            <span>Settings</span>
+          </button>
+          <button class="nav-item" type="button">
+            <span class="nav-icon">◎</span>
+            <span>User</span>
+          </button>
+        </div>
+      </aside>
+
+      <div class="app-main">
+        <div class="mini-toolbar">
+          <button class="toggle-btn" id="toggle-left" type="button" title="Hide sidebar">☰</button>
+          <input
+            id="project-name"
+            class="project-name-input topbar"
+            type="text"
+            value="Dashboard Studio V2"
+            spellcheck="false"
+          />
+          <div class="toolbar-spacer"></div>
+          <button class="ghost-btn save-btn" id="save-btn" type="button">Save</button>
+        </div>
+        <div class="app-content">
+          <main class="canvas-surface" id="canvas-surface">
+            <div class="canvas-controls">
+              <div class="undo-pill">
+                <button id="btn-undo" type="button">↩ Undo</button>
+                <div class="divider"></div>
+                <button id="btn-redo" type="button">Redo ↪</button>
+              </div>
+            </div>
+            <div class="canvas-stage">
+              <div class="canvas-frame">
+                <div class="canvas-grid"></div>
+                <div class="canvas-content" id="canvas-content">
+                  <div class="canvas-guides" id="canvas-guides"></div>
+                  <div class="empty-state">
+                    <div class="empty-title">Drop Tiles Here</div>
+                    <div class="empty-subtitle">
+                      Use the library to add blocks and start composing.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+
+      <aside class="side-panel panel-right">
+        <div id="resize-handle" class="resize-handle" aria-hidden="true"></div>
+        <div class="side-header">
+          <div class="header-row">
+            <div>
+              <div class="side-title">Inspector</div>
+              <div class="side-subtitle" id="project-subtitle">Workspace</div>
+            </div>
+            <div class="export-dropdown">
+              <button id="export-trigger" class="ghost-btn" type="button">Export ▾</button>
+              <div class="export-menu" id="export-menu">
+                <button type="button" data-export="json">JSON</button>
+                <button type="button" data-export="png">PNG</button>
+                <button type="button" data-export="png4k">PNG 4K</button>
+                <button type="button" data-export="pdf">PDF</button>
+              </div>
+            </div>
+          </div>
+          <div class="figma-tabs">
+            <button class="figma-tab active" type="button" data-tab="design">Design</button>
+            <button class="figma-tab" type="button" data-tab="prototype">Prototype</button>
+            <button class="figma-tab" type="button" data-tab="assets">Assets</button>
+            <button class="figma-tab" type="button" data-tab="settings">Settings</button>
+          </div>
+        </div>
+        <div class="side-body figma-panel">
+
+          <div class="tab-content active" id="tab-design">
+            <section class="figma-section">
+              <div class="section-title-row">
+                <div class="section-title">Selection</div>
+                <div class="section-meta" id="selection-label">None</div>
+              </div>
+            </section>
+
+            <section class="figma-section hidden" id="bigstat-section">
+              <div class="section-title-row">
+                <div class="section-title">Big Stat</div>
+              </div>
+              <div class="field">
+                <label>Header</label>
+                <input id="bigstat-header" class="figma-input" type="text" placeholder="Header" />
+              </div>
+              <div class="field">
+                <label>Label</label>
+                <input id="bigstat-label" class="figma-input" type="text" placeholder="Label" />
+              </div>
+              <div class="field">
+                <label>Value</label>
+                <input id="bigstat-value" class="figma-input" type="text" placeholder="Value" />
+              </div>
+              <div class="field-grid two">
+                <div class="field">
+                  <label>Value Size</label>
+                  <input id="bigstat-value-size" class="figma-input" type="number" min="12" max="120" value="20" />
+                </div>
+                <div class="field">
+                  <label>Value Align</label>
+                  <select id="bigstat-value-align" class="figma-select">
+                    <option value="left">Left</option>
+                    <option value="center">Center</option>
+                    <option value="right">Right</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field-grid two">
+                <div class="field">
+                  <label>Label Size</label>
+                  <input id="bigstat-label-size" class="figma-input" type="number" min="8" max="60" value="12" />
+                </div>
+                <div class="field">
+                  <label>Label Align</label>
+                  <select id="bigstat-label-align" class="figma-select">
+                    <option value="left">Left</option>
+                    <option value="center">Center</option>
+                    <option value="right">Right</option>
+                  </select>
+                </div>
+              </div>
+            </section>
+
+            <section class="figma-section">
+              <div class="section-title-row">
+                <div class="section-title">Position</div>
+              </div>
+              <div class="icon-row">
+                <button class="icon-btn-sm" type="button" title="Align left">⟸</button>
+                <button class="icon-btn-sm" type="button" title="Align center">≡</button>
+                <button class="icon-btn-sm" type="button" title="Align right">⟹</button>
+                <span class="icon-spacer"></span>
+                <button class="icon-btn-sm" type="button" title="Align top">⟸</button>
+                <button class="icon-btn-sm" type="button" title="Align middle">≡</button>
+                <button class="icon-btn-sm" type="button" title="Align bottom">⟹</button>
+              </div>
+              <div class="field-grid two">
+                <div class="input-group">
+                  <span class="input-label">X</span>
+                  <input id="tile-arr-x" class="figma-input" type="number" min="0" value="0" />
+                </div>
+                <div class="input-group">
+                  <span class="input-label">Y</span>
+                  <input id="tile-arr-y" class="figma-input" type="number" min="0" value="0" />
+                </div>
+              </div>
+              <div class="field-grid two">
+                <div class="input-group">
+                  <span class="input-label">W</span>
+                  <input id="tile-arr-w" class="figma-input" type="number" min="100" value="300" />
+                </div>
+                <div class="input-group">
+                  <span class="input-label">H</span>
+                  <input id="tile-arr-h" class="figma-input" type="number" min="80" value="180" />
+                </div>
+              </div>
+            </section>
+
+            <section class="figma-section">
+              <div class="section-title-row">
+                <div class="section-title">Layer</div>
+              </div>
+              <div class="field">
+                <label>Opacity</label>
+                <div class="field-row">
+                  <div class="slider-group">
+                    <input
+                      id="tile-style-opacity"
+                      class="figma-slider"
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      value="1"
+                    />
+                  </div>
+                  <div class="input-group has-unit">
+                    <input
+                      id="tile-style-opacity-value"
+                      class="figma-input"
+                      type="number"
+                      min="0"
+                      max="100"
+                      value="100"
+                    />
+                    <span class="unit">%</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="figma-section">
+              <div class="section-title-row">
+                <div class="section-title">Appearance</div>
+              </div>
+              <div class="field-grid two">
+                <div class="field">
+                  <label>Shape</label>
+                  <select id="tile-style-shape" class="figma-select">
+                    <option value="rounded">Rounded</option>
+                    <option value="square">Square</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>Radius</label>
+                  <div class="input-group">
+                    <span class="input-label">⤾</span>
+                    <input id="tile-style-radius" class="figma-input" type="number" min="0" max="40" value="12" />
+                  </div>
+                </div>
+              </div>
+              <div class="field-grid two">
+                <div class="field">
+                  <label>Padding</label>
+                  <input id="tile-style-padding" class="figma-input" type="number" min="0" max="48" value="16" />
+                </div>
+              </div>
+            </section>
+
+            <section class="figma-section">
+              <div class="section-title-row">
+                <div class="section-title">Fill</div>
+              </div>
+              <div class="field-grid two">
+                <div class="field">
+                  <label>Color</label>
+                  <div class="color-row">
+                    <span class="color-swatch">
+                      <input id="tile-style-fill" type="color" value="#0f172a" />
+                    </span>
+                    <input id="tile-style-fill-hex" class="figma-input" type="text" value="#0f172a" />
+                  </div>
+                </div>
+                <div class="field">
+                  <label>Opacity</label>
+                  <input class="figma-input" type="number" min="0" max="100" value="100" disabled />
+                </div>
+              </div>
+            </section>
+
+            <section class="figma-section">
+              <div class="section-title-row">
+                <div class="section-title">Stroke</div>
+              </div>
+              <div class="field-grid two">
+                <div class="field">
+                  <label>Color</label>
+                  <div class="color-row">
+                    <span class="color-swatch">
+                      <input id="tile-style-border" type="color" value="#2b3445" />
+                    </span>
+                    <input id="tile-style-border-hex" class="figma-input" type="text" value="#2b3445" />
+                  </div>
+                </div>
+                <div class="field">
+                  <label>Opacity</label>
+                  <input class="figma-input" type="number" min="0" max="100" value="100" disabled />
+                </div>
+              </div>
+              <div class="field-grid two">
+                <div class="field">
+                  <label>Width</label>
+                  <input id="tile-style-border-width" class="figma-input" type="number" min="0" max="8" value="1" />
+                </div>
+                <div class="field">
+                  <label>Position</label>
+                  <select id="tile-style-stroke-position" class="figma-select">
+                    <option value="inside">Inside</option>
+                    <option value="center">Center</option>
+                    <option value="outside">Outside</option>
+                  </select>
+                </div>
+              </div>
+            </section>
+
+            <section class="figma-section">
+              <div class="section-title-row">
+                <div class="section-title">Effects</div>
+              </div>
+              <div class="field">
+                <label>Shadow</label>
+                <select id="tile-style-shadow" class="figma-select">
+                  <option value="soft">Soft</option>
+                  <option value="strong">Strong</option>
+                  <option value="none">None</option>
+                </select>
+              </div>
+            </section>
+
+            <section class="figma-section">
+              <div class="section-title-row">
+                <div class="section-title">Text</div>
+              </div>
+              <div class="field-grid two">
+                <div class="field">
+                  <label>Font</label>
+                  <select id="tile-text-font" class="figma-select">
+                    <option value="SF Pro Text, SF Pro Display, -apple-system, BlinkMacSystemFont, Segoe UI, Helvetica Neue, Arial, sans-serif">SF Pro Text</option>
+                    <option value="Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Helvetica Neue, Arial, sans-serif">Inter</option>
+                    <option value="Space Grotesk, -apple-system, BlinkMacSystemFont, Segoe UI, Helvetica Neue, Arial, sans-serif">Space Grotesk</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>Size</label>
+                  <input id="tile-text-size" class="figma-input" type="number" min="10" max="32" value="13" />
+                </div>
+              </div>
+              <div class="field-grid two">
+                <div class="field">
+                  <label>Weight</label>
+                  <select id="tile-text-weight" class="figma-select">
+                    <option value="400">Regular</option>
+                    <option value="500">Medium</option>
+                    <option value="600">Semibold</option>
+                    <option value="700">Bold</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>Align</label>
+                  <select id="tile-text-align" class="figma-select">
+                    <option value="left">Left</option>
+                    <option value="center">Center</option>
+                    <option value="right">Right</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field-grid two">
+                <div class="field">
+                  <label>Color</label>
+                  <div class="color-row">
+                    <span class="color-swatch">
+                      <input id="tile-text-color" type="color" value="#e6e7eb" />
+                    </span>
+                    <input class="figma-input" type="text" value="#e6e7eb" disabled />
+                  </div>
+                </div>
+                <div class="field">
+                  <label>Line Height</label>
+                  <input id="tile-text-line-height" class="figma-input" type="number" min="1" max="2" step="0.1" value="1.5" />
+                </div>
+              </div>
+              <div class="field-grid two">
+                <div class="field">
+                  <label>Letter Spacing</label>
+                  <input id="tile-text-letter-spacing" class="figma-input" type="number" min="-1" max="4" step="0.1" value="0" />
+                </div>
+              </div>
+            </section>
+
+            <section class="figma-section hidden" id="kpi-section">
+              <div class="section-title-row">
+                <div class="section-title">KPI Cells</div>
+              </div>
+              <div class="panel-actions">
+                <button class="ghost-btn" id="kpi-add" type="button">Add Cell</button>
+                <button class="ghost-btn" id="kpi-remove" type="button">Remove Cell</button>
+              </div>
+              <div class="field-grid two">
+                <div class="field">
+                  <label>Cell Index</label>
+                  <input id="kpi-cell-index" class="figma-input" type="number" min="1" max="6" value="1" />
+                </div>
+              </div>
+              <div class="field-grid two">
+                <div class="field">
+                  <label>Cell Fill</label>
+                  <div class="color-row">
+                    <span class="color-swatch">
+                      <input id="kpi-cell-fill" type="color" value="#101723" />
+                    </span>
+                    <input class="figma-input" type="text" value="#101723" disabled />
+                  </div>
+                </div>
+                <div class="field">
+                  <label>Cell Border</label>
+                  <div class="color-row">
+                    <span class="color-swatch">
+                      <input id="kpi-cell-border" type="color" value="#1f2937" />
+                    </span>
+                    <input class="figma-input" type="text" value="#1f2937" disabled />
+                  </div>
+                </div>
+              </div>
+              <div class="field-grid two">
+                <div class="field">
+                  <label>Border Width</label>
+                  <input id="kpi-cell-border-width" class="figma-input" type="number" min="0" max="6" value="1" />
+                </div>
+                <div class="field">
+                  <label>Corner</label>
+                  <div class="field-row compact">
+                    <select id="kpi-cell-shape" class="figma-select">
+                      <option value="rounded">Rounded</option>
+                      <option value="square">Square</option>
+                    </select>
+                    <div class="input-group">
+                      <span class="input-label">⤾</span>
+                      <input id="kpi-cell-radius" class="figma-input" type="number" min="0" max="24" value="10" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="field-grid two">
+                <div class="field">
+                  <label>Title Color</label>
+                  <div class="color-row">
+                    <span class="color-swatch">
+                      <input id="kpi-title-color" type="color" value="#8e94a3" />
+                    </span>
+                    <input class="figma-input" type="text" value="#8e94a3" disabled />
+                  </div>
+                </div>
+                <div class="field">
+                  <label>Value Color</label>
+                  <div class="color-row">
+                    <span class="color-swatch">
+                      <input id="kpi-value-color" type="color" value="#e6e7eb" />
+                    </span>
+                    <input class="figma-input" type="text" value="#e6e7eb" disabled />
+                  </div>
+                </div>
+              </div>
+              <div class="field-grid two">
+                <div class="field">
+                  <label>Delta Color</label>
+                  <div class="color-row">
+                    <span class="color-swatch">
+                      <input id="kpi-delta-color" type="color" value="#6ea3ff" />
+                    </span>
+                    <input class="figma-input" type="text" value="#6ea3ff" disabled />
+                  </div>
+                </div>
+                <div class="field">
+                  <label>Cell Text</label>
+                  <div class="color-row">
+                    <span class="color-swatch">
+                      <input id="kpi-cell-text" type="color" value="#e6e7eb" />
+                    </span>
+                    <input class="figma-input" type="text" value="#e6e7eb" disabled />
+                  </div>
+                </div>
+              </div>
+              <div class="field-grid two">
+                <div class="field">
+                  <label>Title Size</label>
+                  <input id="kpi-title-size" class="figma-input" type="number" min="8" max="16" value="10" />
+                </div>
+                <div class="field">
+                  <label>Value Size</label>
+                  <input id="kpi-value-size" class="figma-input" type="number" min="12" max="32" value="20" />
+                </div>
+              </div>
+              <div class="field-grid two">
+                <div class="field">
+                  <label>Delta Size</label>
+                  <input id="kpi-delta-size" class="figma-input" type="number" min="8" max="16" value="11" />
+                </div>
+                <div class="field">
+                  <label>Title Weight</label>
+                  <select id="kpi-title-weight" class="figma-select">
+                    <option value="400">Regular</option>
+                    <option value="500">Medium</option>
+                    <option value="600">Semibold</option>
+                    <option value="700">Bold</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field-grid two">
+                <div class="field">
+                  <label>Value Weight</label>
+                  <select id="kpi-value-weight" class="figma-select">
+                    <option value="500">Medium</option>
+                    <option value="600">Semibold</option>
+                    <option value="700">Bold</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>Delta Weight</label>
+                  <select id="kpi-delta-weight" class="figma-select">
+                    <option value="400">Regular</option>
+                    <option value="500">Medium</option>
+                    <option value="600">Semibold</option>
+                  </select>
+                </div>
+              </div>
+            </section>
+
+            <section class="figma-section hidden" id="demographics-section">
+              <div class="section-title-row">
+                <div class="section-title">Top Demographics</div>
+              </div>
+              <div class="panel-actions">
+                <button class="ghost-btn" id="demo-add" type="button">Add Country</button>
+                <button class="ghost-btn" id="demo-remove" type="button">Remove Country</button>
+              </div>
+              <div class="section-meta">Up to 10 items, 5 per row.</div>
+            </section>
+
+            <section class="figma-section" id="graph-section">
+              <div class="section-title-row">
+                <div class="section-title">Graph Data</div>
+              </div>
+              <textarea
+                class="figma-textarea"
+                id="graph-json"
+                rows="6"
+                placeholder="Paste graph JSON (xAxis, yAxis, points, style)"
+              ></textarea>
+              <div class="panel-actions">
+                <button class="ghost-btn" id="graph-apply" type="button">Apply</button>
+              </div>
+            </section>
+
+            <section class="figma-section" id="table-section">
+              <div class="section-title-row">
+                <div class="section-title">Table Data</div>
+              </div>
+              <textarea
+                class="figma-textarea"
+                id="table-json"
+                rows="6"
+                placeholder="Paste table JSON (columns, rows, settings)"
+              ></textarea>
+              <div class="panel-actions">
+                <button class="ghost-btn" id="table-apply" type="button">Apply</button>
+              </div>
+            </section>
+
+            <section class="figma-section">
+              <div class="section-title-row">
+                <div class="section-title">Arrange</div>
+              </div>
+              <div class="icon-row">
+                <button class="icon-btn-sm" id="tile-arr-front" type="button" title="Bring to front">⤒</button>
+                <button class="icon-btn-sm" id="tile-arr-forward" type="button" title="Bring forward">⤊</button>
+                <button class="icon-btn-sm" id="tile-arr-backward" type="button" title="Send backward">⤋</button>
+                <button class="icon-btn-sm" id="tile-arr-back" type="button" title="Send to back">⤓</button>
+                <span class="icon-spacer"></span>
+                <button class="icon-btn-sm" id="tile-arr-dup" type="button" title="Duplicate">⎘</button>
+                <button class="icon-btn-sm" id="tile-arr-del" type="button" title="Delete">⌫</button>
+              </div>
+            </section>
+          </div>
+
+          <div class="tab-content" id="tab-prototype">
+            <section class="figma-section">
+              <div class="section-title-row">
+                <div class="section-title">Prototype</div>
+              </div>
+              <div class="section-meta">Prototype controls will appear here.</div>
+            </section>
+          </div>
+
+          <div class="tab-content" id="tab-assets">
+            <section class="figma-section">
+              <div class="section-title-row">
+                <div class="section-title">Tile Library</div>
+              </div>
+              <div class="tile-library-grid" id="tile-library">
+                <button class="tile-pill" type="button" data-tile-type="kpi-row">KPI Row</button>
+                <button class="tile-pill" type="button" data-tile-type="big-stat">Big Stat</button>
+                <button class="tile-pill" type="button" data-tile-type="highlights">Highlights</button>
+                <button class="tile-pill" type="button" data-tile-type="blogs">Blogs</button>
+                <button class="tile-pill" type="button" data-tile-type="graph">Graph</button>
+                <button class="tile-pill" type="button" data-tile-type="demographics">Demographics</button>
+                <button class="tile-pill" type="button" data-tile-type="table">Table</button>
+              </div>
+            </section>
+          </div>
+
+          <div class="tab-content" id="tab-settings">
+            <section class="figma-section">
+              <div class="section-title-row">
+                <div class="section-title">Canvas</div>
+              </div>
+              <div class="field">
+                <label>Background</label>
+                <div class="color-row">
+                  <span class="color-swatch">
+                    <input id="canvas-bg" type="color" value="#0b0f14" />
+                  </span>
+                  <input class="figma-input" type="text" value="#0b0f14" disabled />
+                </div>
+              </div>
+              <div class="field">
+                <label>Grid Opacity</label>
+                <input id="canvas-grid" class="figma-slider" type="range" min="0" max="0.2" step="0.01" value="0.08" />
+              </div>
+              <div class="field">
+                <label>Grid Size</label>
+                <input id="canvas-grid-size" class="figma-input" type="number" min="1" max="100" value="12" />
+              </div>
+            </section>
+
+            <section class="figma-section">
+              <div class="section-title-row">
+                <div class="section-title">JSON</div>
+              </div>
+              <textarea
+                class="figma-textarea"
+                id="json-input"
+                rows="6"
+                placeholder="Paste JSON or export your workspace."
+              ></textarea>
+              <div class="panel-actions">
+                <button class="ghost-btn" id="json-import" type="button">Import</button>
+                <button class="ghost-btn" id="json-export" type="button">Export</button>
+              </div>
+            </section>
+
+            <section class="figma-section ai-section">
+              <div class="section-title-row">
+                <div class="section-title">AI Import Prompt</div>
+              </div>
+              <div class="field">
+                <label>Prompt</label>
+                <textarea class="figma-textarea ai-prompt" rows="10" readonly>
+You will receive blog statistics (traffic, engagement, sources, top posts, deltas). Generate a dashboard JSON that includes KPIs and written highlights. Choose the best base schema (A, B, or C) below and follow it exactly. Use the tile examples (D, E, F) as building blocks so you can use all available assets. Output ONLY a single JSON object (no markdown, no code fences). Keep required keys: project, canvas, theme, tiles, selectedTileId. Use numbers for x/y/width/height and hex colors. No comments or trailing commas.</textarea>
+              </div>
+              <div class="ai-samples">
+                <div class="sample-title">All Examples (A–F)</div>
+                <pre class="json-sample">Example A — Minimal Empty Project
+{
+  "project": { "id": null, "name": "AI Draft" },
+  "canvas": {
+    "width": 1600,
+    "height": 1000,
+    "background": "#0b0f14",
+    "gridOpacity": 0.08,
+    "gridSize": 12,
+    "zoom": 1
+  },
+  "theme": {
+    "fontFamily": "SF Pro Text, SF Pro Display, -apple-system, BlinkMacSystemFont, Segoe UI, Helvetica Neue, Arial, sans-serif",
+    "tileBackground": "#0f172a",
+    "tileBorder": "#2b3445",
+    "textColor": "#e5e7f0",
+    "accent": "#3b82f6"
+  },
+  "tiles": [],
+  "selectedTileId": null
+}
+
+Example B — Single Tile
+{
+  "project": { "id": null, "name": "AI Single Tile" },
+  "canvas": {
+    "width": 1600,
+    "height": 1000,
+    "background": "#0b0f14",
+    "gridOpacity": 0.08,
+    "gridSize": 12,
+    "zoom": 1
+  },
+  "theme": {
+    "fontFamily": "SF Pro Text, SF Pro Display, -apple-system, BlinkMacSystemFont, Segoe UI, Helvetica Neue, Arial, sans-serif",
+    "tileBackground": "#0f172a",
+    "tileBorder": "#2b3445",
+    "textColor": "#e5e7f0",
+    "accent": "#3b82f6"
+  },
+  "tiles": [
+    {
+      "id": "tile-1",
+      "type": "big-stat",
+      "x": 80,
+      "y": 80,
+      "width": 520,
+      "height": 200,
+      "data": { "label": "Total Revenue", "value": "$1.2M" },
+      "style": {}
+    }
+  ],
+  "selectedTileId": null
+}
+
+Example C — Multi-Tile Layout
+{
+  "project": { "id": null, "name": "AI Dashboard" },
+  "canvas": {
+    "width": 1600,
+    "height": 1000,
+    "background": "#0b0f14",
+    "gridOpacity": 0.08,
+    "gridSize": 12,
+    "zoom": 1
+  },
+  "theme": {
+    "fontFamily": "SF Pro Text, SF Pro Display, -apple-system, BlinkMacSystemFont, Segoe UI, Helvetica Neue, Arial, sans-serif",
+    "tileBackground": "#0f172a",
+    "tileBorder": "#2b3445",
+    "textColor": "#e5e7f0",
+    "accent": "#3b82f6"
+  },
+  "tiles": [
+    {
+      "id": "tile-kpi",
+      "type": "kpi-row",
+      "x": 80,
+      "y": 80,
+      "width": 880,
+      "height": 140,
+      "data": {
+        "items": [
+          {
+            "title": "Active Users",
+            "value": "4,200",
+            "delta": "+10.5%",
+            "fill": "#101723",
+            "border": "#1f2937",
+            "borderWidth": 1,
+            "radius": 10,
+            "textColor": "#e6e7eb",
+            "titleColor": "#8e94a3",
+            "valueColor": "#e6e7eb",
+            "deltaColor": "#6ea3ff",
+            "titleSize": 10,
+            "valueSize": 20,
+            "deltaSize": 11,
+            "titleWeight": 500,
+            "valueWeight": 600,
+            "deltaWeight": 500
+          },
+          {
+            "title": "New Users",
+            "value": "2,400",
+            "delta": "-20.0%",
+            "fill": "#101723",
+            "border": "#1f2937",
+            "borderWidth": 1,
+            "radius": 10,
+            "textColor": "#e6e7eb",
+            "titleColor": "#8e94a3",
+            "valueColor": "#e6e7eb",
+            "deltaColor": "#6ea3ff",
+            "titleSize": 10,
+            "valueSize": 20,
+            "deltaSize": 11,
+            "titleWeight": 500,
+            "valueWeight": 600,
+            "deltaWeight": 500
+          }
+        ]
+      },
+      "style": {}
+    },
+    {
+      "id": "tile-graph",
+      "type": "graph",
+      "x": 80,
+      "y": 260,
+      "width": 520,
+      "height": 240,
+      "data": {
+        "title": "Traffic Trend",
+        "subtitle": "Last 8 Weeks",
+        "points": [120, 160, 140, 210, 180, 240, 220, 260],
+        "xAxis": ["W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8"],
+        "yAxis": { "show": true, "min": 0, "max": 300, "ticks": 4, "showGrid": true },
+        "style": {
+          "strokeWidth": 3,
+          "lineColor": "#60a5fa",
+          "fillColor": "rgba(96, 165, 250, 0.2)",
+          "gridColor": "rgba(148, 163, 184, 0.2)"
+        }
+      },
+      "style": {}
+    },
+    {
+      "id": "tile-table",
+      "type": "table",
+      "x": 640,
+      "y": 260,
+      "width": 620,
+      "height": 260,
+      "data": {
+        "title": "Top Metrics",
+        "columns": [
+          { "label": "Name", "align": "left", "width": "2fr" },
+          { "label": "Value", "align": "right", "width": "1fr" },
+          { "label": "Delta", "align": "right", "width": "1fr" }
+        ],
+        "rows": [
+          ["Active Users", "4,200", "+10.5%"],
+          ["New Users", "2,400", "-20.0%"],
+          ["Search Views", "13,600", "+13.3%"]
+        ],
+        "settings": { "showHeader": true, "rowHeight": 36, "striped": true }
+      },
+      "style": {}
+    }
+  ],
+  "selectedTileId": null
+}
+
+Example D — Highlights Tile
+{
+  "id": "tile-highlights",
+  "type": "highlights",
+  "x": 80,
+  "y": 540,
+  "width": 520,
+  "height": 260,
+  "data": {
+    "title": "Monthly Highlights",
+    "items": [
+      "Organic search traffic grew by 12%.",
+      "Newsletter click-through rate hit 4.8%.",
+      "Top post drove 28% of weekly sessions."
+    ]
+  },
+  "style": {}
+}
+
+Example E — Blogs Tile
+{
+  "id": "tile-blogs",
+  "type": "blogs",
+  "x": 640,
+  "y": 540,
+  "width": 520,
+  "height": 240,
+  "data": {
+    "title": "Top Posts",
+    "subtitle": "Sorted by Views",
+    "items": [
+      { "title": "Power Up Qwen 3 with AMD", "views": "6.5K" },
+      { "title": "Llama 4 Developer Quickstart", "views": "1.5K" },
+      { "title": "Supercharge DeepSeek-R1", "views": "1.3K" }
+    ]
+  },
+  "style": {}
+}
+
+Example F — Demographics Tile
+{
+  "id": "tile-demographics",
+  "type": "demographics",
+  "x": 1200,
+  "y": 540,
+  "width": 520,
+  "height": 180,
+  "data": {
+    "title": "Top Demographics",
+    "items": [
+      { "label": "USA", "value": "3.8K" },
+      { "label": "China", "value": "1.1K" },
+      { "label": "Russia", "value": "0.9K" }
+    ]
+  },
+  "style": {}
+}</pre>
+              </div>
+            </section>
+          </div>
+        </div>
+      </aside>
+
+    </div>
+
+    <script src="./app.js" type="module"></script>
+  </body>
+</html>

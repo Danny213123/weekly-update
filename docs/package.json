@@ -1,0 +1,21 @@
+{
+  "name": "dashboard-builder-fullstack",
+  "private": true,
+  "version": "1.0.0",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "node src/server.js",
+    "start": "node src/server.js",
+    "cli": "node bin/dashboard-studio.js"
+  },
+  "bin": {
+    "dashboard-studio": "bin/dashboard-studio.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^9.4.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "pdf-lib": "^1.17.1",
+    "playwright": "^1.50.1"
+  }
+}

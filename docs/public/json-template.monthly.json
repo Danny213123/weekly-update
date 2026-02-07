@@ -1,0 +1,232 @@
+{
+  "mode": "monthly",
+  "data": {
+    "schemaVersion": 2,
+    "theme": {
+      "schemaVersion": 2,
+      "typography": {
+        "fontFamily": "\"Space Grotesk\", \"IBM Plex Sans\", \"Sora\", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Arial, sans-serif"
+      },
+      "canvas": {
+        "background": "#000000",
+        "gridOpacity": 0.05
+      },
+      "preview": {
+        "background": "#0f172a",
+        "backgroundAlpha": 1,
+        "text": "#ffffff",
+        "border": "#334155",
+        "radius": 0,
+        "padding": 0,
+        "width": 1100,
+        "height": 0,
+        "shadow": "0 20px 45px rgba(0,0,0,0.45)"
+      },
+      "layout": {
+        "gap": 0,
+        "kpiGap": 0
+      },
+      "panel": {
+        "radius": 0,
+        "border": "#4b5563",
+        "borderWidth": 1
+      },
+      "effects": {
+        "panelOpacity": 1,
+        "kpiOpacity": 1
+      },
+      "kpi": {
+        "titleColor": "#111827",
+        "valueColor": "#111827",
+        "deltaPositiveBg": "#22c55e",
+        "deltaPositiveOpacity": 0.25,
+        "deltaPositiveText": "#166534",
+        "deltaNegativeBg": "#ef4444",
+        "deltaNegativeOpacity": 0.25,
+        "deltaNegativeText": "#991b1b",
+        "deltaNeutralBg": "#e5e7eb",
+        "deltaNeutralOpacity": 1,
+        "deltaNeutralText": "#4b5563"
+      },
+      "bigStat": {
+        "bgFrom": "#334155",
+        "bgTo": "#1e293b",
+        "valueColor": "#ffffff",
+        "labelColor": "#bfdbfe",
+        "border": "#4b5563",
+        "height": 140,
+        "padding": 24
+      },
+      "highlights": {
+        "bg": "#1e293b",
+        "border": "#4b5563",
+        "title": "#93c5fd",
+        "accent": "#3b82f6",
+        "bullet": "#60a5fa",
+        "text": "#d1d5db"
+      },
+      "blogs": {
+        "headerBg": "#475569",
+        "headerText": "#ffffff",
+        "subtitleText": "#ffffff",
+        "subtitleOpacity": 0.6,
+        "rowEven": "#ffffff",
+        "rowOdd": "#f9fafb",
+        "title": "#1d4ed8",
+        "viewsBg": "#e5e7eb",
+        "viewsText": "#1f2937",
+        "border": "#d1d5db",
+        "bg": "#f8fafc"
+      },
+      "demographics": {
+        "headerBg": "#64748b",
+        "headerText": "#ffffff",
+        "bg": "#ffffff",
+        "divider": "#d1d5db",
+        "label": "#4b5563",
+        "value": "#111827"
+      },
+      "graph": {
+        "headerBg": "#0f172a",
+        "headerText": "#e2e8f0",
+        "subtitleText": "#94a3b8",
+        "bg": "#0b1220",
+        "border": "#334155",
+        "grid": "#1f2937",
+        "line": "#38bdf8",
+        "fill": "#38bdf8",
+        "fillOpacity": 0.2,
+        "point": "#e2e8f0",
+        "label": "#94a3b8",
+        "height": 140
+      }
+    },
+    "tiles": [
+      {
+        "id": "tile-1",
+        "type": "kpis",
+        "x": 0,
+        "y": 0,
+        "width": 1100,
+        "height": 120,
+        "data": {
+          "kpis": [
+            {
+              "title": "Active Users",
+              "prev": "3800",
+              "curr": "4200",
+              "deltaOverride": "",
+              "theme": {
+                "from": "#dbeafe",
+                "to": "#bfdbfe",
+                "titleColor": "#1e3a8a",
+                "valueColor": "#111827"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "tile-2",
+        "type": "bigStat",
+        "x": 0,
+        "y": 132,
+        "width": 495,
+        "height": 200,
+        "data": {
+          "value": "13",
+          "label": "Total Blogs Released"
+        }
+      },
+      {
+        "id": "tile-3",
+        "type": "highlights",
+        "x": 0,
+        "y": 344,
+        "width": 495,
+        "height": 240,
+        "data": {
+          "title": "Monthly Highlights",
+          "items": [
+            "Highlight one",
+            "Highlight two"
+          ]
+        }
+      },
+      {
+        "id": "tile-4",
+        "type": "blogs",
+        "x": 495,
+        "y": 132,
+        "width": 605,
+        "height": 220,
+        "data": {
+          "title": "New Monthly Blogs Traffic",
+          "subtitle": "Sorted by Views",
+          "items": [
+            {
+              "title": "Your Blog Title",
+              "views": "6.5K"
+            }
+          ]
+        }
+      },
+      {
+        "id": "tile-5",
+        "type": "graph",
+        "x": 495,
+        "y": 364,
+        "width": 605,
+        "height": 220,
+        "data": {
+          "title": "Traffic Trend",
+          "subtitle": "Last 8 Weeks",
+          "type": "line",
+          "series": [
+            {
+              "label": "W1",
+              "value": "120"
+            },
+            {
+              "label": "W2",
+              "value": "160"
+            },
+            {
+              "label": "W3",
+              "value": "140"
+            },
+            {
+              "label": "W4",
+              "value": "210"
+            },
+            {
+              "label": "W5",
+              "value": "180"
+            },
+            {
+              "label": "W6",
+              "value": "240"
+            }
+          ]
+        }
+      },
+      {
+        "id": "tile-6",
+        "type": "demographics",
+        "x": 495,
+        "y": 596,
+        "width": 605,
+        "height": 140,
+        "data": {
+          "title": "Top Demographics",
+          "items": [
+            {
+              "country": "Region",
+              "val": "3.8K"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
