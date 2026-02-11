@@ -9,6 +9,7 @@ require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const HOST = process.env.HOST || '127.0.0.1';
 
 app.use(express.json({ limit: '2mb' }));
 
@@ -320,7 +321,7 @@ app.post('/api/export', async (req, res) => {
     }, { data, mode: exportMode });
 
     const baseUrl = `${req.protocol}://${req.get('host')}`;
-    await page.goto(`${baseUrl}/?mode=${exportMode}`, { waitUntil: 'networkidle' });
+    await page.goto(`${baseUrl}/v1/?mode=${exportMode}`, { waitUntil: 'networkidle' });
     await page.waitForSelector('#dashboard-preview', { timeout: 15000 });
     await page.waitForFunction(() => window.__EXPORT_READY__ === true, null, { timeout: 15000 });
 
@@ -419,7 +420,7 @@ app.post('/api/export-v2', async (req, res) => {
     }, data);
 
     const baseUrl = `${req.protocol}://${req.get('host')}`;
-    await page.goto(`${baseUrl}/v2`, { waitUntil: 'networkidle' });
+    await page.goto(`${baseUrl}/v2/`, { waitUntil: 'networkidle' });
     await page.waitForFunction(() => window.__EXPORT_READY__ === true, null, { timeout: 15000 });
 
     const exportSize = await page.evaluate((scale) => {
@@ -511,16 +512,40 @@ app.post('/api/export-v2', async (req, res) => {
 });
 
 const publicDir = path.join(__dirname, '..', 'public');
-app.use(express.static(publicDir));
+const v1IndexPath = path.join(publicDir, 'index.html');
+const v2IndexPath = path.join(publicDir, 'v2', 'index.html');
+
+app.get('/', (req, res) => {
+  res.redirect('/v2/');
+});
+
+app.get(/^\/v2$/, (req, res) => {
+  res.redirect('/v2/');
+});
+
+app.get('/v2/', (req, res) => {
+  res.sendFile(v2IndexPath);
+});
+
+app.get(/^\/v1$/, (req, res) => {
+  res.redirect('/v1/');
+});
+
+app.get('/v1/', (req, res) => {
+  res.sendFile(v1IndexPath);
+});
+
+app.use(express.static(publicDir, { index: false }));
 
 app.get('/yearly', (req, res) => {
-  res.redirect('/?mode=yearly');
+  res.redirect('/v2/');
 });
 
 app.get('/monthly', (req, res) => {
-  res.redirect('/?mode=monthly');
+  res.redirect('/v2/');
 });
 
-app.listen(PORT, () => {
-  console.log(`Dashboard Builder running on http://localhost:${PORT}`);
+app.listen(PORT, HOST, () => {
+  const localUrl = HOST === '0.0.0.0' ? `http://localhost:${PORT}` : `http://${HOST}:${PORT}`;
+  console.log(`Dashboard Builder running on ${localUrl}`);
 });

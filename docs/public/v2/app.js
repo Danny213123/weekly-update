@@ -21,6 +21,8 @@ const tileStyleOpacityInput = document.getElementById('tile-style-opacity');
 const tileStyleOpacityValueInput = document.getElementById('tile-style-opacity-value');
 const tileStylePaddingInput = document.getElementById('tile-style-padding');
 const tileStyleShadowInput = document.getElementById('tile-style-shadow');
+const tileStyleHighlightInput = document.getElementById('tile-style-highlight');
+const tileStyleHighlightIdleInput = document.getElementById('tile-style-highlight-idle');
 const tileTextFontInput = document.getElementById('tile-text-font');
 const tileTextSizeInput = document.getElementById('tile-text-size');
 const tileTextWeightInput = document.getElementById('tile-text-weight');
@@ -55,6 +57,7 @@ const tableApplyBtn = document.getElementById('table-apply');
 const graphSection = document.getElementById('graph-section');
 const tableSection = document.getElementById('table-section');
 const bigStatSection = document.getElementById('bigstat-section');
+const highlightsSection = document.getElementById('highlights-section');
 const kpiSection = document.getElementById('kpi-section');
 const demographicsSection = document.getElementById('demographics-section');
 const tileArrFrontBtn = document.getElementById('tile-arr-front');
@@ -92,6 +95,16 @@ const kpiAddBtn = document.getElementById('kpi-add');
 const kpiRemoveBtn = document.getElementById('kpi-remove');
 const demoAddBtn = document.getElementById('demo-add');
 const demoRemoveBtn = document.getElementById('demo-remove');
+const highlightsAddBtn = document.getElementById('highlights-add');
+const highlightsRemoveBtn = document.getElementById('highlights-remove');
+const highlightsLineIndexInput = document.getElementById('highlights-line-index');
+const highlightsLineTextInput = document.getElementById('highlights-line-text');
+const tileGraphicIconInput = document.getElementById('tile-graphic-icon');
+const tileGraphicImageUrlInput = document.getElementById('tile-graphic-image-url');
+const tileGraphicImageFileInput = document.getElementById('tile-graphic-image-file');
+const tileGraphicImageFitInput = document.getElementById('tile-graphic-image-fit');
+const tileGraphicImageOpacityInput = document.getElementById('tile-graphic-image-opacity');
+const tileGraphicImageClearBtn = document.getElementById('tile-graphic-image-clear');
 
 const exportPayload = window.__EXPORT_DATA__ ?? null;
 const isExport = Boolean(exportPayload && typeof exportPayload === 'object');
@@ -233,6 +246,7 @@ const MIN_TILE_WIDTH = 200;
 const MIN_TILE_HEIGHT = 120;
 const MAX_KPI_CELLS = 6;
 const MAX_DEMO_ITEMS = 10;
+const MAX_HIGHLIGHT_ITEMS = 20;
 const DEMO_COLUMNS = 5;
 let lastRoundedRadius = 12;
 const kpiCellRadiusMemory = {};
@@ -366,10 +380,13 @@ const createDefaultDemoItem = (index = 0) => ({
   value: '0'
 });
 
+const createDefaultHighlightLine = (index = 0) => `New highlight ${index + 1}`;
+
 const DEFAULT_TILES = {
   'kpi-row': {
     size: { w: 880, h: 140 },
     data: {
+      icon: '📊',
       items: [
         {
           title: 'Active Users',
@@ -452,11 +469,12 @@ const DEFAULT_TILES = {
   },
   'big-stat': {
     size: { w: 520, h: 200 },
-    data: { header: 'Big Stat', label: 'Total Blogs Released', value: '13' }
+    data: { header: 'Big Stat', label: 'Total Blogs Released', value: '13', icon: '✨' }
   },
   highlights: {
     size: { w: 520, h: 260 },
     data: {
+      icon: '🔥',
       title: 'Monthly Highlights',
       items: [
         'Month-over-month user activity grew through organic search.',
@@ -468,6 +486,7 @@ const DEFAULT_TILES = {
   blogs: {
     size: { w: 520, h: 240 },
     data: {
+      icon: '📰',
       title: 'New Monthly Blogs Traffic',
       subtitle: 'Sorted by Views',
       items: [
@@ -480,6 +499,7 @@ const DEFAULT_TILES = {
   graph: {
     size: { w: 520, h: 240 },
     data: {
+      icon: '📈',
       title: 'Traffic Trend',
       subtitle: 'Last 8 Weeks',
       points: [120, 160, 140, 210, 180, 240, 220, 260],
@@ -496,6 +516,7 @@ const DEFAULT_TILES = {
   demographics: {
     size: { w: 520, h: 180 },
     data: {
+      icon: '🌍',
       title: 'Top Demographics',
       items: [
         { label: 'USA', value: '3.8K' },
@@ -507,6 +528,7 @@ const DEFAULT_TILES = {
   table: {
     size: { w: 620, h: 260 },
     data: {
+      icon: '🧾',
       title: 'Table',
       columns: [
         { label: 'Name', align: 'left', width: '2fr' },
@@ -537,6 +559,8 @@ const getTileStyle = (tile) => ({
   opacity: tile.style?.opacity ?? 1,
   padding: tile.style?.padding ?? 16,
   shadow: tile.style?.shadow ?? SHADOW_PRESETS.soft,
+  highlightColor: tile.style?.highlightColor ?? state.theme.accent,
+  highlightIdle: tile.style?.highlightIdle !== false,
   textColor: tile.style?.textColor ?? state.theme.textColor,
   fontFamily: tile.style?.fontFamily ?? state.theme.fontFamily,
   fontSize: tile.style?.fontSize ?? 13,
@@ -545,6 +569,38 @@ const getTileStyle = (tile) => ({
   lineHeight: tile.style?.lineHeight ?? 1.5,
   letterSpacing: tile.style?.letterSpacing ?? 0
 });
+
+const clampImageOpacity = (value) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 0.2;
+  return Math.min(1, Math.max(0, parsed));
+};
+
+const toHighlightRgba = (color, alpha = 0.28) => {
+  const hex = normalizeHex(color);
+  if (!hex) return `rgba(91, 130, 246, ${alpha})`;
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+const getTileGraphics = (tile) => {
+  const icon = typeof tile?.data?.icon === 'string' ? tile.data.icon.trim() : '';
+  const imageUrl = typeof tile?.data?.imageUrl === 'string' ? tile.data.imageUrl.trim() : '';
+  const imageFit = tile?.data?.imageFit === 'contain' ? 'contain' : 'cover';
+  const imageOpacity = clampImageOpacity(tile?.data?.imageOpacity);
+  return { icon, imageUrl, imageFit, imageOpacity };
+};
+
+const renderTileGraphics = (tile) => {
+  const graphics = getTileGraphics(tile);
+  const iconHtml = graphics.icon ? `<div class="tile-media-icon editable" contenteditable data-field="icon">${graphics.icon}</div>` : '';
+  const imageHtml = graphics.imageUrl
+    ? `<div class="tile-media-image"><img src="${graphics.imageUrl}" alt="" loading="lazy" style="object-fit:${graphics.imageFit};opacity:${graphics.imageOpacity};" /></div>`
+    : '';
+  return `${iconHtml}${imageHtml}`;
+};
 
 if (isExport) {
   replaceState(exportPayload);
@@ -879,6 +935,8 @@ const applyInspectorValues = () => {
     tileStyleOpacityValueInput,
     tileStylePaddingInput,
     tileStyleShadowInput,
+    tileStyleHighlightInput,
+    tileStyleHighlightIdleInput,
     tileTextFontInput,
     tileTextSizeInput,
     tileTextWeightInput,
@@ -903,10 +961,20 @@ const applyInspectorValues = () => {
     bigStatLabelSizeInput,
     bigStatValueAlignInput,
     bigStatLabelAlignInput,
+    tileGraphicIconInput,
+    tileGraphicImageUrlInput,
+    tileGraphicImageFileInput,
+    tileGraphicImageFitInput,
+    tileGraphicImageOpacityInput,
+    tileGraphicImageClearBtn,
     kpiAddBtn,
     kpiRemoveBtn,
     demoAddBtn,
     demoRemoveBtn,
+    highlightsAddBtn,
+    highlightsRemoveBtn,
+    highlightsLineIndexInput,
+    highlightsLineTextInput,
     kpiCellIndexInput,
     kpiCellFillInput,
     kpiCellBorderInput,
@@ -930,9 +998,10 @@ const applyInspectorValues = () => {
   ].forEach(disable);
 
   if (selectionLabel) {
-    selectionLabel.textContent = tile ? tile.type.replace(/-/g, ' ') : 'None';
+    selectionLabel.textContent = tile ? tile.type.replace(/-/g, ' ') : 'Select a tile';
   }
   if (bigStatSection) bigStatSection.classList.toggle('hidden', tile?.type !== 'big-stat');
+  if (highlightsSection) highlightsSection.classList.toggle('hidden', tile?.type !== 'highlights');
   if (kpiSection) kpiSection.classList.toggle('hidden', tile?.type !== 'kpi-row');
   if (demographicsSection) demographicsSection.classList.toggle('hidden', tile?.type !== 'demographics');
   if (graphSection) graphSection.classList.toggle('hidden', tile?.type !== 'graph');
@@ -957,6 +1026,8 @@ const applyInspectorValues = () => {
     const preset = Object.entries(SHADOW_PRESETS).find(([, val]) => val === style.shadow);
     tileStyleShadowInput.value = preset ? preset[0] : 'soft';
   }
+  if (tileStyleHighlightInput) tileStyleHighlightInput.value = style.highlightColor;
+  if (tileStyleHighlightIdleInput) tileStyleHighlightIdleInput.checked = style.highlightIdle;
 
   if (tileTextFontInput) tileTextFontInput.value = style.fontFamily;
   if (tileTextSizeInput) tileTextSizeInput.value = style.fontSize;
@@ -970,6 +1041,20 @@ const applyInspectorValues = () => {
   if (tileArrYInput) tileArrYInput.value = Math.round(tile.y);
   if (tileArrWInput) tileArrWInput.value = Math.round(tile.width);
   if (tileArrHInput) tileArrHInput.value = Math.round(tile.height);
+
+  const graphics = getTileGraphics(tile);
+  if (tileGraphicIconInput && document.activeElement !== tileGraphicIconInput) {
+    tileGraphicIconInput.value = graphics.icon;
+  }
+  if (tileGraphicImageUrlInput && document.activeElement !== tileGraphicImageUrlInput) {
+    tileGraphicImageUrlInput.value = graphics.imageUrl;
+  }
+  if (tileGraphicImageFitInput) {
+    tileGraphicImageFitInput.value = graphics.imageFit;
+  }
+  if (tileGraphicImageOpacityInput && document.activeElement !== tileGraphicImageOpacityInput) {
+    tileGraphicImageOpacityInput.value = String(Number(graphics.imageOpacity.toFixed(2)));
+  }
 
   if (tile.type === 'big-stat') {
     const valueSize = clampFontSize(tile.data?.valueSize ?? style.fontSize ?? 20, 12, 120, 20);
@@ -1034,6 +1119,25 @@ const applyInspectorValues = () => {
     const total = Array.isArray(tile.data?.items) ? tile.data.items.length : 0;
     if (demoAddBtn) demoAddBtn.disabled = total >= MAX_DEMO_ITEMS;
     if (demoRemoveBtn) demoRemoveBtn.disabled = total <= 1;
+  }
+  if (tile.type === 'highlights') {
+    const lines = Array.isArray(tile.data?.items) ? tile.data.items : [];
+    if (highlightsAddBtn) highlightsAddBtn.disabled = lines.length >= MAX_HIGHLIGHT_ITEMS;
+    if (highlightsRemoveBtn) highlightsRemoveBtn.disabled = lines.length <= 1;
+    if (highlightsLineIndexInput) {
+      const max = Math.max(1, lines.length);
+      highlightsLineIndexInput.max = String(max);
+      const current = Number(highlightsLineIndexInput.value || 1);
+      const clamped = Math.min(max, Math.max(1, Number.isFinite(current) ? current : 1));
+      if (current !== clamped) highlightsLineIndexInput.value = String(clamped);
+    }
+    const index = Math.max(
+      0,
+      Math.min(lines.length - 1, Number(highlightsLineIndexInput?.value || 1) - 1)
+    );
+    if (highlightsLineTextInput && document.activeElement !== highlightsLineTextInput) {
+      highlightsLineTextInput.value = lines[index] || '';
+    }
   }
   lastInspectorTileId = tile.id;
 };
@@ -1120,6 +1224,7 @@ const renderTileContent = (tile) => {
       {
         const columns = Math.max(1, Math.min(tile.data.items.length, MAX_KPI_CELLS));
         return `
+        ${renderTileGraphics(tile)}
         <div class="kpi-row" style="--kpi-columns:${columns};">
           ${tile.data.items
             .map(
@@ -1164,6 +1269,7 @@ const renderTileContent = (tile) => {
         const labelAlign = tile.data?.labelAlign || style.textAlign || 'left';
         const headerAlign = tile.data?.headerAlign || labelAlign || style.textAlign || 'left';
         return `
+          ${renderTileGraphics(tile)}
           <div class="tile-header editable" contenteditable data-field="header" style="
             display:block;
             text-align:${headerAlign};
@@ -1180,6 +1286,7 @@ const renderTileContent = (tile) => {
       }
     case 'highlights':
       return `
+        ${renderTileGraphics(tile)}
         <div class="tile-header editable" contenteditable data-field="title">${tile.data.title}</div>
         <ul>
           ${tile.data.items
@@ -1193,6 +1300,7 @@ const renderTileContent = (tile) => {
       `;
     case 'blogs':
       return `
+        ${renderTileGraphics(tile)}
         <div class="tile-header">
           <div>
             <div class="editable" contenteditable data-field="title">${tile.data.title}</div>
@@ -1211,6 +1319,7 @@ const renderTileContent = (tile) => {
       `;
     case 'graph':
       return `
+        ${renderTileGraphics(tile)}
         <div class="tile-header">
           <div>
             <div class="editable" contenteditable data-field="title">${tile.data.title}</div>
@@ -1223,6 +1332,7 @@ const renderTileContent = (tile) => {
       {
         const columns = Math.max(1, Math.min(tile.data.items.length, DEMO_COLUMNS));
         return `
+        ${renderTileGraphics(tile)}
         <div class="tile-header editable" contenteditable data-field="title">${tile.data.title}</div>
         <div class="kpi-row" style="--kpi-columns:${columns};">
           ${tile.data.items
@@ -1256,6 +1366,7 @@ const renderTileContent = (tile) => {
           .map((col) => (col && typeof col === 'object' ? col.width || '1fr' : '1fr'))
           .join(' ');
         return `
+          ${renderTileGraphics(tile)}
           <div class="tile-header editable" contenteditable data-field="title">${tile.data.title}</div>
           <div class="table-grid" style="--table-columns:${templateColumns}; --row-height:${rowHeight}px;">
             ${
@@ -1291,7 +1402,7 @@ const renderTileContent = (tile) => {
         `;
       }
     default:
-      return `<div class="tile-header">${tile.type}</div>`;
+      return `${renderTileGraphics(tile)}<div class="tile-header">${tile.type}</div>`;
   }
 };
 
@@ -1332,7 +1443,15 @@ const renderTiles = () => {
     node.style.borderRadius = `${style.borderRadius}px`;
     node.style.opacity = style.opacity;
     node.style.padding = `${style.padding}px`;
-    node.style.boxShadow = style.shadow;
+    const highlightRing = style.highlightIdle
+      ? `0 0 0 1px ${toHighlightRgba(style.highlightColor, 0.28)}`
+      : 'none';
+    if (style.shadow && style.shadow !== 'none') {
+      node.style.boxShadow = style.highlightIdle ? `${style.shadow}, ${highlightRing}` : style.shadow;
+    } else {
+      node.style.boxShadow = style.highlightIdle ? highlightRing : 'none';
+    }
+    node.style.setProperty('--tile-highlight', style.highlightColor);
     node.style.color = style.textColor;
     node.style.fontFamily = style.fontFamily;
     node.style.fontSize = `${style.fontSize}px`;
@@ -1573,6 +1692,15 @@ const attachInspectorHandlers = () => {
     scheduleHistory('Big Stat');
   };
 
+  const updateTileGraphics = (patch) => {
+    const tile = state.tiles.find((t) => t.id === state.selectedTileId);
+    if (!tile) return;
+    tile.data = tile.data || {};
+    Object.assign(tile.data, patch);
+    renderTiles();
+    scheduleHistory('Graphics');
+  };
+
   const updateKpiItems = (mutate) => {
     const tile = state.tiles.find((t) => t.id === state.selectedTileId);
     if (!tile || tile.type !== 'kpi-row') return;
@@ -1593,6 +1721,17 @@ const attachInspectorHandlers = () => {
     renderTiles();
     applyInspectorValues();
     scheduleHistory('Demographics');
+  };
+
+  const updateHighlightsItems = (mutate) => {
+    const tile = state.tiles.find((t) => t.id === state.selectedTileId);
+    if (!tile || tile.type !== 'highlights') return;
+    tile.data = tile.data || {};
+    tile.data.items = Array.isArray(tile.data.items) ? tile.data.items : [];
+    mutate(tile.data.items);
+    renderTiles();
+    applyInspectorValues();
+    scheduleHistory('Highlights');
   };
 
   tileStyleFillInput?.addEventListener('input', () => {
@@ -1649,6 +1788,12 @@ const attachInspectorHandlers = () => {
   tileStyleShadowInput?.addEventListener('change', () =>
     updateTileStyle({ shadow: SHADOW_PRESETS[tileStyleShadowInput.value] || SHADOW_PRESETS.soft })
   );
+  tileStyleHighlightInput?.addEventListener('input', () =>
+    updateTileStyle({ highlightColor: tileStyleHighlightInput.value })
+  );
+  tileStyleHighlightIdleInput?.addEventListener('change', () =>
+    updateTileStyle({ highlightIdle: Boolean(tileStyleHighlightIdleInput.checked) })
+  );
 
   tileTextFontInput?.addEventListener('change', () => updateTileStyle({ fontFamily: tileTextFontInput.value }));
   tileTextSizeInput?.addEventListener('input', () =>
@@ -1684,6 +1829,46 @@ const attachInspectorHandlers = () => {
     updateBigStatData({ labelAlign: bigStatLabelAlignInput.value })
   );
 
+  tileGraphicIconInput?.addEventListener('input', () =>
+    updateTileGraphics({ icon: tileGraphicIconInput.value })
+  );
+  tileGraphicImageUrlInput?.addEventListener('input', () =>
+    updateTileGraphics({ imageUrl: tileGraphicImageUrlInput.value.trim() })
+  );
+  tileGraphicImageFitInput?.addEventListener('change', () =>
+    updateTileGraphics({ imageFit: tileGraphicImageFitInput.value === 'contain' ? 'contain' : 'cover' })
+  );
+  tileGraphicImageOpacityInput?.addEventListener('input', () =>
+    updateTileGraphics({ imageOpacity: clampImageOpacity(tileGraphicImageOpacityInput.value) })
+  );
+  tileGraphicImageClearBtn?.addEventListener('click', () => {
+    if (tileGraphicImageUrlInput) tileGraphicImageUrlInput.value = '';
+    if (tileGraphicImageFileInput) tileGraphicImageFileInput.value = '';
+    updateTileGraphics({ imageUrl: '' });
+  });
+  tileGraphicImageFileInput?.addEventListener('change', () => {
+    const file = tileGraphicImageFileInput.files && tileGraphicImageFileInput.files[0];
+    if (!file) return;
+    if (!file.type || !file.type.startsWith('image/')) {
+      alert('Please choose an image file.');
+      tileGraphicImageFileInput.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === 'string' ? reader.result : '';
+      if (!dataUrl) return;
+      if (tileGraphicImageUrlInput) tileGraphicImageUrlInput.value = dataUrl;
+      updateTileGraphics({ imageUrl: dataUrl });
+      tileGraphicImageFileInput.value = '';
+    };
+    reader.onerror = () => {
+      alert('Could not read that file. Try another image.');
+      tileGraphicImageFileInput.value = '';
+    };
+    reader.readAsDataURL(file);
+  });
+
   kpiAddBtn?.addEventListener('click', () => {
     updateKpiItems((items) => {
       if (items.length >= MAX_KPI_CELLS) return;
@@ -1711,6 +1896,36 @@ const attachInspectorHandlers = () => {
       if (items.length <= 1) return;
       items.pop();
     });
+  });
+
+  highlightsAddBtn?.addEventListener('click', () => {
+    updateHighlightsItems((items) => {
+      if (items.length >= MAX_HIGHLIGHT_ITEMS) return;
+      items.push(createDefaultHighlightLine(items.length));
+    });
+  });
+
+  highlightsRemoveBtn?.addEventListener('click', () => {
+    updateHighlightsItems((items) => {
+      if (items.length <= 1) return;
+      const rawIndex = Number(highlightsLineIndexInput?.value || items.length);
+      const index = Math.max(0, Math.min(items.length - 1, Number.isFinite(rawIndex) ? rawIndex - 1 : items.length - 1));
+      items.splice(index, 1);
+    });
+  });
+
+  highlightsLineIndexInput?.addEventListener('input', () => applyInspectorValues());
+  highlightsLineTextInput?.addEventListener('input', () => {
+    const tile = state.tiles.find((t) => t.id === state.selectedTileId);
+    if (!tile || tile.type !== 'highlights') return;
+    tile.data = tile.data || {};
+    tile.data.items = Array.isArray(tile.data.items) ? tile.data.items : [];
+    if (!tile.data.items.length) return;
+    const rawIndex = Number(highlightsLineIndexInput?.value || 1);
+    const index = Math.max(0, Math.min(tile.data.items.length - 1, Number.isFinite(rawIndex) ? rawIndex - 1 : 0));
+    tile.data.items[index] = highlightsLineTextInput.value;
+    renderTiles();
+    scheduleHistory('Highlights');
   });
 
   const updateKpiCell = (patch) => {

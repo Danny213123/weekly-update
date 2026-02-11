@@ -23,8 +23,8 @@ npm run dev
 ```
 
 Open:
-- Combined dashboard: `http://localhost:3000/` (switch mode in the header)
-- Direct yearly link: `http://localhost:3000/yearly` (auto-switches to Yearly mode)
+- Dashboard Studio V2 (primary): `http://localhost:3000/` (auto-routes to `/v2`)
+- Direct V2 link: `http://localhost:3000/v2`
 
 ## JSON Import/Export
 
@@ -58,6 +58,7 @@ dashboard-studio import-json --type yearly --file public/json-template.yearly.js
 dashboard-studio export-png --type monthly --out exports/monthly.png
 dashboard-studio build
 dashboard-studio launch --open
+dashboard-studio quick-launch --open
 ```
 
 ## Export Output

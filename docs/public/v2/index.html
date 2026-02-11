@@ -333,13 +333,30 @@
               <div class="section-title-row">
                 <div class="section-title">Effects</div>
               </div>
+              <div class="field-grid two">
+                <div class="field">
+                  <label>Shadow</label>
+                  <select id="tile-style-shadow" class="figma-select">
+                    <option value="soft">Soft</option>
+                    <option value="strong">Strong</option>
+                    <option value="none">None</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>Selection Highlight</label>
+                  <div class="color-row">
+                    <span class="color-swatch">
+                      <input id="tile-style-highlight" type="color" value="#3b82f6" />
+                    </span>
+                    <input class="figma-input" type="text" value="#3b82f6" disabled />
+                  </div>
+                </div>
+              </div>
               <div class="field">
-                <label>Shadow</label>
-                <select id="tile-style-shadow" class="figma-select">
-                  <option value="soft">Soft</option>
-                  <option value="strong">Strong</option>
-                  <option value="none">None</option>
-                </select>
+                <label class="toggle-row">
+                  <input id="tile-style-highlight-idle" type="checkbox" checked />
+                  <span>Show highlight on unselected tiles</span>
+                </label>
               </div>
             </section>
 
@@ -400,6 +417,48 @@
                   <label>Letter Spacing</label>
                   <input id="tile-text-letter-spacing" class="figma-input" type="number" min="-1" max="4" step="0.1" value="0" />
                 </div>
+              </div>
+            </section>
+
+            <section class="figma-section">
+              <div class="section-title-row">
+                <div class="section-title">Graphics</div>
+                <div class="section-meta">Icon + image accents</div>
+              </div>
+              <div class="field-grid two">
+                <div class="field">
+                  <label>Icon</label>
+                  <input id="tile-graphic-icon" class="figma-input" type="text" placeholder="e.g. 📈, ⭐, 🚀" />
+                </div>
+                <div class="field">
+                  <label>Image Fit</label>
+                  <select id="tile-graphic-image-fit" class="figma-select">
+                    <option value="cover">Cover</option>
+                    <option value="contain">Contain</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field">
+                <label>Image URL / Data URL</label>
+                <input
+                  id="tile-graphic-image-url"
+                  class="figma-input"
+                  type="text"
+                  placeholder="https://... or data:image/...;base64,..."
+                />
+              </div>
+              <div class="field-grid two">
+                <div class="field">
+                  <label>Upload Image</label>
+                  <input id="tile-graphic-image-file" class="figma-input" type="file" accept="image/*" />
+                </div>
+                <div class="field">
+                  <label>Image Opacity</label>
+                  <input id="tile-graphic-image-opacity" class="figma-input" type="number" min="0" max="1" step="0.05" value="0.2" />
+                </div>
+              </div>
+              <div class="panel-actions">
+                <button class="ghost-btn" id="tile-graphic-image-clear" type="button">Clear Image</button>
               </div>
             </section>
 
@@ -538,6 +597,26 @@
                     <option value="600">Semibold</option>
                   </select>
                 </div>
+              </div>
+            </section>
+
+            <section class="figma-section hidden" id="highlights-section">
+              <div class="section-title-row">
+                <div class="section-title">Highlights</div>
+              </div>
+              <div class="panel-actions">
+                <button class="ghost-btn" id="highlights-add" type="button">Add Line</button>
+                <button class="ghost-btn" id="highlights-remove" type="button">Remove Line</button>
+              </div>
+              <div class="field-grid two">
+                <div class="field">
+                  <label>Line Index</label>
+                  <input id="highlights-line-index" class="figma-input" type="number" min="1" value="1" />
+                </div>
+              </div>
+              <div class="field">
+                <label>Line Text</label>
+                <input id="highlights-line-text" class="figma-input" type="text" placeholder="Edit selected highlight line" />
               </div>
             </section>
 

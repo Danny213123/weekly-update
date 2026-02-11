@@ -6,6 +6,7 @@ const readline = require('readline');
 const { spawn } = require('child_process');
 const http = require('http');
 const https = require('https');
+const os = require('os');
 const Database = require('better-sqlite3');
 const { chromium } = require('playwright');
 const { PDFDocument } = require('pdf-lib');
@@ -139,6 +140,19 @@ function openBrowser(url) {
         return;
     }
     spawn('xdg-open', [url], { stdio: 'ignore', detached: true });
+}
+
+function getLanUrls(port) {
+    const networks = os.networkInterfaces();
+    const urls = new Set();
+    Object.values(networks).forEach((entries) => {
+        (entries || []).forEach((entry) => {
+            if (!entry || entry.internal) return;
+            if (entry.family !== 'IPv4') return;
+            urls.add(`http://${entry.address}:${port}`);
+        });
+    });
+    return Array.from(urls).sort();
 }
 
 async function confirm(question) {
@@ -334,8 +348,9 @@ async function runInteractive(db) {
         log('4. Export JSON');
         log('5. Import JSON');
         log('6. Export PNG/PDF');
-        log('7. Launch site');
-        log('8. Exit');
+        log('7. Launch site (local)');
+        log('8. Quick launch (local network)');
+        log('9. Exit');
 
         const choice = await prompt('\nSelect an option: ');
         switch (choice.trim()) {
@@ -361,6 +376,9 @@ async function runInteractive(db) {
                 await handleLaunchSite({ open: true });
                 break;
             case '8':
+                await handleLaunchSite({ open: true, lan: true });
+                break;
+            case '9':
                 running = false;
                 break;
             default:
@@ -552,24 +570,36 @@ async function handleBuildExports(db, options = {}) {
 
 async function handleLaunchSite(options = {}) {
     const rootDir = path.join(__dirname, '..');
-    const port = options.port || process.env.PORT || 3000;
-    const url = `http://localhost:${port}`;
+    const parsedPort = Number(options.port || process.env.PORT || 3000);
+    const port = Number.isFinite(parsedPort) ? parsedPort : 3000;
+    const configuredHost = (options.host || process.env.HOST || '127.0.0.1').toString();
+    const host = options.lan ? '0.0.0.0' : configuredHost;
     const openAfter = options.open === true;
+    const localUrl = `http://localhost:${port}`;
+    const primaryUrl = host === '0.0.0.0' ? localUrl : `http://${host}:${port}`;
+    const lanUrls = host === '0.0.0.0' ? getLanUrls(port) : [];
 
-    printSubHeader('Launching Dashboard Studio');
-    log(`Server: ${url}`, colors.cyan);
+    printSubHeader(options.lan ? 'Quick Launch (LAN)' : 'Launching Dashboard Studio');
+    log(`Server: ${primaryUrl}`, colors.cyan);
+    if (lanUrls.length) {
+        log('Share on your local network:', colors.cyan);
+        lanUrls.forEach((url) => log(`  - ${url}`, colors.green));
+    } else if (options.lan) {
+        logWarning('No non-internal IPv4 interfaces found. LAN URL unavailable.');
+    }
     log('Press Ctrl+C to stop the server.', colors.dim);
 
-    const env = { ...process.env, PORT: String(port) };
+    const env = { ...process.env, PORT: String(port), HOST: host };
     const child = spawn('node', [path.join(rootDir, 'src', 'server.js')], {
         stdio: 'inherit',
         env
     });
 
     if (openAfter) {
-        const ready = await waitForHealth(`${url}/api/health`);
+        const healthUrl = `http://127.0.0.1:${port}/api/health`;
+        const ready = await waitForHealth(healthUrl);
         if (ready) {
-            openBrowser(url);
+            openBrowser(localUrl);
         } else {
             logWarning('Server did not respond yet. Open the URL manually.');
         }
@@ -591,7 +621,9 @@ function showHelp() {
     log('  import-json --type <mode> --file <path> [--save-version]');
     log('  export-png --type <mode> [--version <id>] --out <file>');
     log('  export-pdf --type <mode> [--version <id>] --out <file>');
-    log('  launch [--port <port>] [--open]  Start the site locally');
+    log('  launch [--port <port>] [--host <host>] [--open] [--lan]');
+    log('  quick-launch [--port <port>] [--open]  Start and share on local network');
+    log('  launch-lan [--port <port>] [--open]    Alias for quick-launch');
     log('  build                    Export monthly+yearly PNG/PDF to exports/');
 }
 
@@ -683,7 +715,22 @@ async function runCommand(args) {
         }
         case 'launch': {
             const port = parsed.port ? Number(parsed.port) : (process.env.PORT ? Number(process.env.PORT) : 3000);
-            await handleLaunchSite({ open: Boolean(parsed.open), port: Number.isFinite(port) ? port : 3000 });
+            await handleLaunchSite({
+                open: Boolean(parsed.open),
+                port: Number.isFinite(port) ? port : 3000,
+                host: parsed.host || process.env.HOST || '127.0.0.1',
+                lan: Boolean(parsed.lan)
+            });
+            break;
+        }
+        case 'quick-launch':
+        case 'launch-lan': {
+            const port = parsed.port ? Number(parsed.port) : (process.env.PORT ? Number(process.env.PORT) : 3000);
+            await handleLaunchSite({
+                open: parsed.open === undefined ? true : Boolean(parsed.open),
+                port: Number.isFinite(port) ? port : 3000,
+                lan: true
+            });
             break;
         }
         case 'build':
