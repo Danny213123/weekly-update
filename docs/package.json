@@ -4,9 +4,10 @@
   "version": "1.0.0",
   "type": "commonjs",
   "scripts": {
-    "dev": "node src/server.js",
-    "start": "node src/server.js",
-    "cli": "node bin/dashboard-studio.js"
+    "dev": "./bin/run-node.sh src/server.js",
+    "start": "./bin/run-node.sh src/server.js",
+    "cli": "./bin/run-node.sh bin/dashboard-studio.js",
+    "build": "./bin/run-node.sh bin/dashboard-studio.js build"
   },
   "bin": {
     "dashboard-studio": "bin/dashboard-studio.js"

@@ -428,6 +428,16 @@ body.v2-app {
   padding: 6px 12px;
 }
 
+.ghost-btn.danger-btn {
+  color: #ffb7b7;
+  border-color: rgba(255, 100, 100, 0.24);
+}
+
+.ghost-btn.danger-btn:hover {
+  background: rgba(255, 100, 100, 0.08);
+  border-color: rgba(255, 100, 100, 0.38);
+}
+
 .primary-btn {
   background: var(--accent);
   border-color: var(--accent);
@@ -730,6 +740,10 @@ body.v2-app {
   gap: 8px;
 }
 
+.panel-actions.wrap {
+  flex-wrap: wrap;
+}
+
 .field-row {
   display: flex;
   flex-direction: column;
@@ -843,7 +857,7 @@ body.v2-app {
 .table-row {
   display: grid;
   grid-template-columns: var(--table-columns, 1fr 1fr 1fr);
-  align-items: center;
+  align-items: stretch;
   min-height: var(--row-height, 36px);
 }
 
@@ -860,10 +874,27 @@ body.v2-app {
 }
 
 .table-cell {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: var(--row-height, 36px);
   padding: 6px 10px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   font-size: 12px;
   color: var(--text);
+}
+
+.table-cell.wrap {
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
+  line-height: 1.45;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.table-cell.nowrap {
+  white-space: nowrap;
 }
 
 .table-row:last-child .table-cell {
@@ -871,14 +902,17 @@ body.v2-app {
 }
 
 .table-cell.align-left {
+  justify-content: flex-start;
   text-align: left;
 }
 
 .table-cell.align-right {
+  justify-content: flex-end;
   text-align: right;
 }
 
 .table-cell.align-center {
+  justify-content: center;
   text-align: center;
 }
 
@@ -1547,6 +1581,10 @@ body.export-mode .canvas-content {
 
 .side-panel .ghost-btn:hover {
   border-color: var(--figma-hover);
+}
+
+.side-panel .ghost-btn.danger-btn:hover {
+  border-color: rgba(255, 100, 100, 0.38);
 }
 
 /* Range Slider */

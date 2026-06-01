@@ -67,6 +67,8 @@
             spellcheck="false"
           />
           <div class="toolbar-spacer"></div>
+          <button class="ghost-btn save-btn" id="copy-project-btn" type="button">Copy</button>
+          <button class="ghost-btn save-btn danger-btn" id="delete-project-btn" type="button">Delete</button>
           <button class="ghost-btn save-btn" id="save-btn" type="button">Save</button>
         </div>
         <div class="app-content">
@@ -108,6 +110,7 @@
               <button id="export-trigger" class="ghost-btn" type="button">Export ▾</button>
               <div class="export-menu" id="export-menu">
                 <button type="button" data-export="json">JSON</button>
+                <button type="button" data-export="xml">XML (Draw.io)</button>
                 <button type="button" data-export="png">PNG</button>
                 <button type="button" data-export="png4k">PNG 4K</button>
                 <button type="button" data-export="pdf">PDF</button>
@@ -731,15 +734,34 @@
               <div class="section-title-row">
                 <div class="section-title">JSON</div>
               </div>
+              <div class="section-meta">Replace Data keeps the current layout and styling. Add to Current appends imported tiles. Replace swaps the full workspace.</div>
               <textarea
                 class="figma-textarea"
                 id="json-input"
                 rows="6"
                 placeholder="Paste JSON or export your workspace."
               ></textarea>
-              <div class="panel-actions">
-                <button class="ghost-btn" id="json-import" type="button">Import</button>
+              <div class="panel-actions wrap">
+                <button class="ghost-btn" id="json-import-data" type="button">Replace Data</button>
+                <button class="ghost-btn" id="json-import-merge" type="button">Add to Current</button>
+                <button class="ghost-btn" id="json-import" type="button">Replace</button>
                 <button class="ghost-btn" id="json-export" type="button">Export</button>
+              </div>
+            </section>
+
+            <section class="figma-section">
+              <div class="section-title-row">
+                <div class="section-title">XML (Draw.io)</div>
+              </div>
+              <textarea
+                class="figma-textarea"
+                id="xml-input"
+                rows="6"
+                placeholder="Paste XML (Draw.io or Dashboard Studio) or export as .xml for Draw.io."
+              ></textarea>
+              <div class="panel-actions">
+                <button class="ghost-btn" id="xml-import" type="button">Import</button>
+                <button class="ghost-btn" id="xml-export" type="button">Export</button>
               </div>
             </section>
 
@@ -750,10 +772,22 @@
               <div class="field">
                 <label>Prompt</label>
                 <textarea class="figma-textarea ai-prompt" rows="10" readonly>
-You will receive blog statistics (traffic, engagement, sources, top posts, deltas). Generate a dashboard JSON that includes KPIs and written highlights. Choose the best base schema (A, B, or C) below and follow it exactly. Use the tile examples (D, E, F) as building blocks so you can use all available assets. Output ONLY a single JSON object (no markdown, no code fences). Keep required keys: project, canvas, theme, tiles, selectedTileId. Use numbers for x/y/width/height and hex colors. No comments or trailing commas.</textarea>
+You will receive blog statistics (traffic, engagement, sources, top posts, deltas). Generate JSON for Dashboard Studio V2. Choose the output mode that matches the import button:
+
+1. Replace Data: output a content-only object with { "mode": "data-only", "tiles": [...] }. Match existing tiles by id whenever possible. Include only the fields that should change inside each tile's data. Do NOT include tile.style, x, y, width, height, canvas, theme, colors, borders, fonts, KPI card styling, or graph data.style.
+2. Add to Current or Replace: output a full workspace object with project, canvas, theme, tiles, selectedTileId.
+
+For data-only payloads:
+- kpi-row items: title, value, delta only
+- big-stat: header, label, value
+- graph: title, subtitle, points, xAxis, yAxis only
+- table: title, columns labels, rows only
+- highlights/blogs/demographics: text content only
+
+Output ONLY one JSON object. No markdown, no comments, no trailing commas.</textarea>
               </div>
               <div class="ai-samples">
-                <div class="sample-title">All Examples (A–F)</div>
+                <div class="sample-title">All Examples (A–G)</div>
                 <pre class="json-sample">Example A — Minimal Empty Project
 {
   "project": { "id": null, "name": "AI Draft" },
@@ -984,6 +1018,53 @@ Example F — Demographics Tile
     ]
   },
   "style": {}
+}
+
+Example G — Data-Only Update for Replace Data
+{
+  "mode": "data-only",
+  "tiles": [
+    {
+      "id": "tile-kpi",
+      "type": "kpi-row",
+      "data": {
+        "items": [
+          { "title": "Active Users", "value": "10K", "delta": "" },
+          { "title": "New Users", "value": "4.5K", "delta": "" },
+          { "title": "Total Views", "value": "25K", "delta": "" },
+          { "title": "Avg Engagement", "value": "2m 00s", "delta": "+46.84%" }
+        ]
+      }
+    },
+    {
+      "id": "tile-traffic-trend",
+      "type": "graph",
+      "data": {
+        "title": "User Activity Over Time",
+        "subtitle": "February 2026 — Weekly Active Users",
+        "points": [2800, 3100, 2600, 3200],
+        "xAxis": ["Feb 1–7", "Feb 8–14", "Feb 15–21", "Feb 22–28"],
+        "yAxis": { "show": true, "min": 0, "max": 4000, "ticks": 4, "showGrid": true }
+      }
+    },
+    {
+      "id": "tile-traffic-sources",
+      "type": "table",
+      "data": {
+        "title": "Traffic Acquisition — Sessions by Channel",
+        "columns": [
+          { "label": "Channel" },
+          { "label": "Sessions" },
+          { "label": "Share" }
+        ],
+        "rows": [
+          ["Organic Search", "12K", "56.6%"],
+          ["Referral", "3.9K", "18.4%"],
+          ["Direct", "2.8K", "13.2%"]
+        ]
+      }
+    }
+  ]
 }</pre>
               </div>
             </section>

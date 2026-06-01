@@ -72,6 +72,14 @@ async function getBrowser() {
   return browserPromise;
 }
 
+function getExportErrorMessage(err) {
+  const message = err?.message || '';
+  if (message.includes("Executable doesn't exist")) {
+    return 'Playwright Chromium is not installed. Run "npx playwright install chromium" in docs/, then restart the server.';
+  }
+  return 'Export failed.';
+}
+
 function parseData(payload) {
   if (!payload) return null;
   try {
@@ -148,6 +156,20 @@ app.get('/api/projects', (req, res) => {
       updatedAt: row.updated_at
     }))
   });
+});
+
+app.delete('/api/projects/:id', (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) {
+    return res.status(400).json({ error: 'Invalid project id.' });
+  }
+
+  const result = db.prepare('DELETE FROM projects WHERE id = ?').run(id);
+  if (!result.changes) {
+    return res.status(404).json({ error: 'Project not found.' });
+  }
+
+  return res.json({ ok: true, id });
 });
 
 app.get('/api/dashboards', requireDashboardType, (req, res) => {
@@ -309,12 +331,14 @@ app.post('/api/export', async (req, res) => {
     return res.status(400).json({ error: 'Body must include a "data" object.' });
   }
 
-  const browser = await getBrowser();
-  const page = await browser.newPage({
-    viewport: { width: 1500, height: 1000, deviceScaleFactor: 3 }
-  });
+  let page = null;
 
   try {
+    const browser = await getBrowser();
+    page = await browser.newPage({
+      viewport: { width: 1500, height: 1000, deviceScaleFactor: 3 }
+    });
+
     await page.addInitScript((payload) => {
       window.__EXPORT_DATA__ = payload.data;
       window.__EXPORT_MODE__ = payload.mode;
@@ -389,9 +413,10 @@ app.post('/api/export', async (req, res) => {
   } catch (err) {
     console.error('Export failed:', err);
     if (!res.headersSent) {
-      return res.status(500).json({ error: 'Export failed.' });
+      return res.status(500).json({ error: getExportErrorMessage(err) });
     }
   } finally {
+    if (!page) return;
     try {
       await page.close();
     } catch (err) {
@@ -408,7 +433,7 @@ app.post('/api/export-v2', async (req, res) => {
     return res.status(400).json({ error: 'Body must include a "data" object.' });
   }
 
-  const browser = await getBrowser();
+  let browser = null;
 
   const openExportPage = async (deviceScaleFactor, exportScale = 1) => {
     const page = await browser.newPage({
@@ -446,6 +471,8 @@ app.post('/api/export-v2', async (req, res) => {
   let page = null;
 
   try {
+    browser = await getBrowser();
+
     if (exportFormat === 'png4k') {
       const base = await openExportPage(1, 1);
       const baseWidth = base.exportSize?.width || 1600;
@@ -500,7 +527,7 @@ app.post('/api/export-v2', async (req, res) => {
   } catch (err) {
     console.error('Export v2 failed:', err);
     if (!res.headersSent) {
-      return res.status(500).json({ error: 'Export failed.' });
+      return res.status(500).json({ error: getExportErrorMessage(err) });
     }
   } finally {
     try {

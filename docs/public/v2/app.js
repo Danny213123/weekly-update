@@ -8,6 +8,9 @@ const tileLibrary = document.getElementById('tile-library');
 const jsonInput = document.getElementById('json-input');
 const jsonImportBtn = document.getElementById('json-import');
 const jsonExportBtn = document.getElementById('json-export');
+const xmlInput = document.getElementById('xml-input');
+const xmlImportBtn = document.getElementById('xml-import');
+const xmlExportBtn = document.getElementById('xml-export');
 const canvasBgInput = document.getElementById('canvas-bg');
 const canvasGridInput = document.getElementById('canvas-grid');
 const tileStyleFillInput = document.getElementById('tile-style-fill');
@@ -78,6 +81,8 @@ const exportMenu = document.getElementById('export-menu');
 const historyToggleBtn = document.getElementById('history-toggle');
 const historyMenu = document.getElementById('history-menu');
 const projectNameInput = document.getElementById('project-name');
+const copyProjectBtn = document.getElementById('copy-project-btn');
+const deleteProjectBtn = document.getElementById('delete-project-btn');
 const projectList = document.getElementById('project-list');
 const newProjectBtn = document.getElementById('action-new-project');
 const importJsonNavBtn = document.getElementById('action-import-json');
@@ -105,6 +110,8 @@ const tileGraphicImageFileInput = document.getElementById('tile-graphic-image-fi
 const tileGraphicImageFitInput = document.getElementById('tile-graphic-image-fit');
 const tileGraphicImageOpacityInput = document.getElementById('tile-graphic-image-opacity');
 const tileGraphicImageClearBtn = document.getElementById('tile-graphic-image-clear');
+const jsonImportDataBtn = document.getElementById('json-import-data');
+const jsonImportMergeBtn = document.getElementById('json-import-merge');
 
 const exportPayload = window.__EXPORT_DATA__ ?? null;
 const isExport = Boolean(exportPayload && typeof exportPayload === 'object');
@@ -118,6 +125,7 @@ let historyIndex = -1;
 let isApplyingHistory = false;
 let historyTimer = null;
 let pendingHistoryName = null;
+let projectCache = [];
 
 const normalizeHex = (value) => {
   if (!value) return null;
@@ -137,6 +145,948 @@ const normalizeHex = (value) => {
 
 const deepClone = (value) => JSON.parse(JSON.stringify(value));
 
+const getFirstElementChild = (node) =>
+  Array.from(node?.childNodes || []).find((child) => child.nodeType === Node.ELEMENT_NODE) || null;
+
+const encodeXmlValue = (doc, value) => {
+  const node = doc.createElement('value');
+  if (value === null) {
+    node.setAttribute('type', 'null');
+    return node;
+  }
+  if (Array.isArray(value)) {
+    node.setAttribute('type', 'array');
+    value.forEach((item) => {
+      const itemNode = doc.createElement('item');
+      itemNode.appendChild(encodeXmlValue(doc, item));
+      node.appendChild(itemNode);
+    });
+    return node;
+  }
+  const valueType = typeof value;
+  if (valueType === 'object') {
+    node.setAttribute('type', 'object');
+    Object.entries(value).forEach(([key, item]) => {
+      const fieldNode = doc.createElement('field');
+      fieldNode.setAttribute('name', key);
+      fieldNode.appendChild(encodeXmlValue(doc, item));
+      node.appendChild(fieldNode);
+    });
+    return node;
+  }
+  if (valueType === 'number') {
+    node.setAttribute('type', 'number');
+    node.textContent = Number.isFinite(value) ? String(value) : '0';
+    return node;
+  }
+  if (valueType === 'boolean') {
+    node.setAttribute('type', 'boolean');
+    node.textContent = value ? 'true' : 'false';
+    return node;
+  }
+  node.setAttribute('type', 'string');
+  node.textContent = String(value ?? '');
+  return node;
+};
+
+const decodeXmlValue = (node) => {
+  if (!node) return null;
+  if (node.nodeName === 'state') {
+    return decodeXmlValue(getFirstElementChild(node));
+  }
+
+  const type = node.getAttribute?.('type') || '';
+  if (type === 'null') return null;
+  if (type === 'number') {
+    const parsed = Number(node.textContent || '0');
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  if (type === 'boolean') return (node.textContent || '').trim().toLowerCase() === 'true';
+  if (type === 'string') return node.textContent || '';
+  if (type === 'array') {
+    return Array.from(node.children)
+      .filter((child) => child.nodeName === 'item')
+      .map((child) => decodeXmlValue(getFirstElementChild(child)));
+  }
+  if (type === 'object') {
+    const out = {};
+    Array.from(node.children)
+      .filter((child) => child.nodeName === 'field')
+      .forEach((field) => {
+        const key = field.getAttribute('name') || '';
+        if (!key) return;
+        out[key] = decodeXmlValue(getFirstElementChild(field));
+      });
+    return out;
+  }
+
+  // Fallback for XML authored manually without type attributes.
+  const objectFields = Array.from(node.children).filter(
+    (child) => child.nodeName === 'field' && child.hasAttribute('name')
+  );
+  if (objectFields.length) {
+    const out = {};
+    objectFields.forEach((field) => {
+      const key = field.getAttribute('name') || '';
+      if (!key) return;
+      out[key] = decodeXmlValue(getFirstElementChild(field));
+    });
+    return out;
+  }
+
+  const arrayItems = Array.from(node.children).filter((child) => child.nodeName === 'item');
+  if (arrayItems.length) {
+    return arrayItems.map((child) => decodeXmlValue(getFirstElementChild(child)));
+  }
+
+  return node.textContent || '';
+};
+
+const xmlNumber = (value, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const xmlClamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+const sanitizeXmlString = (value) =>
+  String(value ?? '')
+    // XML 1.0 legal chars: TAB, LF, CR, U+0020..U+D7FF, U+E000..U+FFFD
+    .replace(/[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD]/g, '');
+
+const sanitizeDrawioStyleValue = (value) =>
+  sanitizeXmlString(value)
+    .replaceAll(';', ',')
+    .replaceAll('=', ':')
+    .replace(/[\r\n\t]+/g, ' ')
+    .trim();
+
+const encodeMetadataJson = (value) => {
+  try {
+    const serialized = JSON.stringify(value ?? {});
+    return encodeBase64Utf8(sanitizeXmlString(serialized));
+  } catch (err) {
+    return '';
+  }
+};
+
+const encodeBase64Utf8 = (value) => {
+  try {
+    const input = String(value ?? '');
+    const bytes = new TextEncoder().encode(input);
+    let binary = '';
+    bytes.forEach((byte) => {
+      binary += String.fromCharCode(byte);
+    });
+    return btoa(binary);
+  } catch (err) {
+    return '';
+  }
+};
+
+const decodeBase64Utf8 = (value) => {
+  try {
+    const binary = atob(String(value ?? ''));
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
+  } catch (err) {
+    return '';
+  }
+};
+
+const parseDrawioStyle = (styleText) => {
+  const output = {};
+  String(styleText || '')
+    .split(';')
+    .forEach((entry) => {
+      const trimmed = entry.trim();
+      if (!trimmed) return;
+      const equalsAt = trimmed.indexOf('=');
+      if (equalsAt <= 0) return;
+      const key = trimmed.slice(0, equalsAt).trim();
+      const value = trimmed.slice(equalsAt + 1).trim();
+      if (!key) return;
+      output[key] = value;
+    });
+  return output;
+};
+
+const toDrawioStyleString = (styleMap) => {
+  const entries = Object.entries(styleMap || {}).filter(
+    ([key, value]) => key && value !== undefined && value !== null && value !== ''
+  );
+  if (!entries.length) return '';
+  return `${entries
+    .map(([key, value]) => `${sanitizeXmlString(key).replace(/[;\s=]+/g, '')}=${sanitizeDrawioStyleValue(value)}`)
+    .join(';')};`;
+};
+
+const normalizeDrawioColor = (value, fallback) => {
+  const raw = typeof value === 'string' ? value.trim() : '';
+  if (!raw || raw === 'none' || raw === 'default') return fallback;
+  return normalizeHex(raw) || fallback;
+};
+
+const drawioKnownTileTypes = new Set([
+  'kpi-row',
+  'big-stat',
+  'highlights',
+  'blogs',
+  'graph',
+  'demographics',
+  'table'
+]);
+
+const getTileLabelForDrawio = (tile) => {
+  const type = String(tile?.type || '');
+  const data = tile?.data || {};
+  if (type === 'kpi-row') {
+    const icon = typeof data.icon === 'string' ? data.icon.trim() : '';
+    return icon || 'KPI';
+  }
+  if (type === 'demographics' || type === 'table') {
+    const icon = typeof data.icon === 'string' ? data.icon.trim() : '';
+    const title = typeof data.title === 'string' ? data.title.trim() : '';
+    return [icon, title].filter(Boolean).join('\n');
+  }
+
+  const lines = [];
+  const pushLine = (value) => {
+    const text = typeof value === 'string' ? value.trim() : '';
+    if (text) lines.push(text);
+  };
+  pushLine(data.icon);
+  pushLine(data.header);
+  pushLine(data.title);
+  pushLine(data.subtitle);
+  pushLine(data.value);
+  pushLine(data.label);
+
+  if (Array.isArray(data.items)) {
+    data.items.slice(0, 6).forEach((item) => {
+      if (typeof item === 'string') {
+        pushLine(`- ${item}`);
+        return;
+      }
+      if (!item || typeof item !== 'object') return;
+      const left = item.title || item.label || '';
+      const right = item.value || item.views || item.delta || '';
+      const text = [left, right].filter(Boolean).join(': ');
+      pushLine(text);
+    });
+  }
+
+  if (Array.isArray(data.rows)) {
+    data.rows.slice(0, 4).forEach((row) => {
+      if (!Array.isArray(row)) return;
+      const line = row
+        .map((cell) => String(cell ?? '').trim())
+        .filter(Boolean)
+        .join(' | ');
+      pushLine(line);
+    });
+  }
+
+  if (!lines.length) {
+    pushLine((tile?.type || 'tile').replaceAll('-', ' '));
+  }
+  return lines.slice(0, 14).join('\n');
+};
+
+const getDrawioPartStyle = ({
+  fillColor,
+  strokeColor,
+  strokeWidth,
+  borderRadius,
+  width,
+  height,
+  fontColor,
+  fontFamily,
+  fontSize,
+  bold = false,
+  align = 'left',
+  verticalAlign = 'top',
+  spacing = 8
+}) =>
+  toDrawioStyleString({
+    shape: 'rectangle',
+    rounded: xmlNumber(borderRadius, 0) > 0 ? 1 : 0,
+    arcSize:
+      xmlNumber(borderRadius, 0) > 0 ? getDrawioArcSize(borderRadius, width, height) : null,
+    whiteSpace: 'wrap',
+    html: 1,
+    fillColor,
+    strokeColor,
+    strokeWidth: Math.max(0, xmlNumber(strokeWidth, 1)),
+    fontColor,
+    fontFamily: fontFamily || 'Arial',
+    fontSize: Math.max(8, Math.round(xmlNumber(fontSize, 12))),
+    fontStyle: bold ? 1 : 0,
+    align: align === 'center' || align === 'right' ? align : 'left',
+    verticalAlign,
+    spacing: Math.max(0, Math.round(xmlNumber(spacing, 8)))
+  });
+
+const getDrawioArcSize = (radius, width, height) => {
+  const parsedRadius = Math.max(0, xmlNumber(radius, 0));
+  if (parsedRadius <= 0) return 0;
+  const minSize = Math.max(1, Math.min(xmlNumber(width, 1), xmlNumber(height, 1)));
+  const percent = Math.round((parsedRadius / minSize) * 100);
+  return xmlClamp(percent, 1, 50);
+};
+
+const getDrawioTileStyle = (tile) => {
+  const style = getTileStyle(tile);
+  const rounded = xmlNumber(style.borderRadius, 0) > 0;
+  const fontWeight = xmlNumber(style.fontWeight, 500);
+  const fillColor = normalizeDrawioColor(style.background, '#0f172a');
+  const borderColor = normalizeDrawioColor(style.border, '#2b3445');
+  const textColor = normalizeDrawioColor(style.textColor, '#e5e7f0');
+  const drawioStyle = {
+    shape: 'rectangle',
+    rounded: rounded ? 1 : 0,
+    arcSize: rounded ? getDrawioArcSize(style.borderRadius, tile?.width, tile?.height) : null,
+    whiteSpace: 'wrap',
+    html: 1,
+    fillColor,
+    strokeColor: borderColor,
+    strokeWidth: Math.max(0, xmlNumber(style.borderWidth, 1)),
+    opacity: Math.round(xmlClamp(xmlNumber(style.opacity, 1), 0, 1) * 100),
+    shadow: style.shadow && style.shadow !== 'none' ? 1 : 0,
+    fontColor: textColor,
+    fontFamily: style.fontFamily || 'Arial',
+    fontSize: Math.max(8, Math.round(xmlNumber(style.fontSize, 13))),
+    fontStyle: fontWeight >= 600 ? 1 : 0,
+    align:
+      style.textAlign === 'center' || style.textAlign === 'right' ? style.textAlign : 'left',
+    verticalAlign: 'top',
+    spacing: Math.max(0, Math.round(xmlNumber(style.padding, 16)))
+  };
+  return toDrawioStyleString(drawioStyle);
+};
+
+const getDrawioGraphModelFromDiagramNode = (diagramNode) => {
+  if (!diagramNode) return null;
+  const directModel = Array.from(diagramNode.childNodes).find(
+    (child) => child.nodeType === Node.ELEMENT_NODE && child.nodeName === 'mxGraphModel'
+  );
+  if (directModel) return directModel;
+
+  const raw = (diagramNode.textContent || '').trim();
+  if (!raw) return null;
+  // Defensive fallback: treat XML-looking payload as uncompressed draw.io data
+  // regardless of compressed attribute state.
+  if (!raw.startsWith('<')) return null;
+  const nested = new DOMParser().parseFromString(raw, 'application/xml');
+  if (nested.querySelector('parsererror')) return null;
+  return nested.documentElement?.nodeName === 'mxGraphModel' ? nested.documentElement : null;
+};
+
+const getDrawioGraphModel = (doc) => {
+  const root = doc.documentElement;
+  if (!root) return { graphModel: null, diagramNode: null };
+  if (root.nodeName === 'mxGraphModel') {
+    return { graphModel: root, diagramNode: null };
+  }
+  if (root.nodeName === 'diagram') {
+    return { graphModel: getDrawioGraphModelFromDiagramNode(root), diagramNode: root };
+  }
+  if (root.nodeName === 'mxfile') {
+    const diagramNode = root.querySelector('diagram');
+    return {
+      graphModel: getDrawioGraphModelFromDiagramNode(diagramNode),
+      diagramNode
+    };
+  }
+  return { graphModel: null, diagramNode: null };
+};
+
+const decodeDrawioCellValue = (value) =>
+  String(value || '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .trim();
+
+const buildFallbackTileFromDrawioCell = ({ cell, geometry, styleMap, index }) => {
+  const width = Math.max(120, xmlNumber(geometry?.getAttribute('width'), 320));
+  const height = Math.max(80, xmlNumber(geometry?.getAttribute('height'), 180));
+  const x = Math.max(0, xmlNumber(geometry?.getAttribute('x'), 0));
+  const y = Math.max(0, xmlNumber(geometry?.getAttribute('y'), 0));
+  const rounded = styleMap.rounded === '1' || styleMap.rounded === 'true';
+  const arcSize = xmlNumber(styleMap.arcSize, 12);
+  const fallbackText = decodeDrawioCellValue(cell.getAttribute('value') || '');
+  const lines = fallbackText.split('\n').map((line) => line.trim()).filter(Boolean);
+  const title = lines[0] || 'Imported shape';
+  const value = lines[1] || lines[0] || 'Value';
+  const label = lines.slice(2).join(' ');
+  const borderRadius = rounded ? Math.max(2, Math.round((Math.min(width, height) * arcSize) / 100)) : 0;
+
+  return {
+    id: `tile-import-${Date.now()}-${index}`,
+    type: 'big-stat',
+    x,
+    y,
+    width,
+    height,
+    zIndex: index + 1,
+    style: {
+      background: normalizeDrawioColor(styleMap.fillColor, '#0f172a'),
+      border: normalizeDrawioColor(styleMap.strokeColor, '#2b3445'),
+      borderWidth: Math.max(0, xmlNumber(styleMap.strokeWidth, 1)),
+      borderRadius,
+      opacity: xmlClamp(xmlNumber(styleMap.opacity, 100) / 100, 0, 1),
+      padding: Math.max(0, Math.round(xmlNumber(styleMap.spacing, 16))),
+      shadow: styleMap.shadow === '1' ? '0 12px 24px rgba(0, 0, 0, 0.35)' : 'none',
+      textColor: normalizeDrawioColor(styleMap.fontColor, '#e5e7f0'),
+      fontFamily: styleMap.fontFamily || 'Arial',
+      fontSize: Math.max(8, Math.round(xmlNumber(styleMap.fontSize, 13))),
+      fontWeight: (xmlNumber(styleMap.fontStyle, 0) & 1) === 1 ? 700 : 500,
+      textAlign:
+        styleMap.align === 'center' || styleMap.align === 'right' ? styleMap.align : 'left',
+      lineHeight: 1.5,
+      letterSpacing: 0
+    },
+    data: {
+      header: title,
+      value,
+      label
+    }
+  };
+};
+
+const parseDrawioXmlToState = (doc) => {
+  const { graphModel, diagramNode } = getDrawioGraphModel(doc);
+  if (!graphModel) return null;
+
+  const vertexCells = Array.from(graphModel.querySelectorAll('root > mxCell[vertex="1"]'));
+  const taggedRootCells = vertexCells.filter((cell) => {
+    const role = cell.getAttribute('dashboardRole');
+    if (role === 'tile-root') return true;
+    if (role === 'tile-part') return false;
+    return (
+      cell.hasAttribute('dashboardTile') ||
+      cell.hasAttribute('tileType') ||
+      cell.hasAttribute('tileId')
+    );
+  });
+  const importCells = taggedRootCells.length
+    ? taggedRootCells
+    : vertexCells.filter((cell) => cell.getAttribute('dashboardRole') !== 'tile-part');
+  if (!importCells.length) {
+    const encodedWorkspace =
+      diagramNode?.getAttribute('dashboardState') || graphModel.getAttribute('dashboardState') || '';
+    if (encodedWorkspace) {
+      const decoded = decodeBase64Utf8(encodedWorkspace);
+      if (decoded) {
+        try {
+          const parsed = JSON.parse(decoded);
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            return parsed;
+          }
+        } catch (err) {
+          // ignore and fall back to default empty import
+        }
+      }
+    }
+  }
+
+  const tiles = [];
+  importCells.forEach((cell, index) => {
+    const geometry = cell.querySelector('mxGeometry');
+    if (!geometry) return;
+
+    const styleMap = parseDrawioStyle(cell.getAttribute('style') || '');
+    const encodedTile = cell.getAttribute('dashboardTile') || '';
+    let tile = null;
+
+    if (encodedTile) {
+      const decodedTile = decodeBase64Utf8(encodedTile);
+      if (decodedTile) {
+        try {
+          const parsedTile = JSON.parse(decodedTile);
+          if (parsedTile && typeof parsedTile === 'object' && !Array.isArray(parsedTile)) {
+            tile = parsedTile;
+          }
+        } catch (err) {
+          tile = null;
+        }
+      }
+    }
+
+    if (!tile) {
+      tile = buildFallbackTileFromDrawioCell({ cell, geometry, styleMap, index });
+    }
+
+    tile.id = String(cell.getAttribute('tileId') || tile.id || `tile-import-${index + 1}`);
+    const rawType = String(cell.getAttribute('tileType') || tile.type || '').trim();
+    tile.type = drawioKnownTileTypes.has(rawType) ? rawType : tile.type || 'big-stat';
+    tile.x = Math.max(0, xmlNumber(geometry.getAttribute('x'), tile.x || 0));
+    tile.y = Math.max(0, xmlNumber(geometry.getAttribute('y'), tile.y || 0));
+    tile.width = Math.max(120, xmlNumber(geometry.getAttribute('width'), tile.width || 320));
+    tile.height = Math.max(80, xmlNumber(geometry.getAttribute('height'), tile.height || 180));
+    const parsedZ = xmlNumber(cell.getAttribute('tileZIndex'), Number.NaN);
+    tile.zIndex = Number.isFinite(parsedZ) ? parsedZ : xmlNumber(tile.zIndex, index + 1);
+    tile.style = tile.style && typeof tile.style === 'object' ? tile.style : {};
+    tile.style.background = normalizeDrawioColor(
+      styleMap.fillColor,
+      tile.style.background || '#0f172a'
+    );
+    tile.style.border = normalizeDrawioColor(styleMap.strokeColor, tile.style.border || '#2b3445');
+    tile.style.borderWidth = Math.max(0, xmlNumber(styleMap.strokeWidth, tile.style.borderWidth || 1));
+    const styleOpacityFallback =
+      typeof tile.style.opacity === 'number' ? tile.style.opacity * 100 : 100;
+    tile.style.opacity = xmlClamp(
+      xmlNumber(styleMap.opacity, styleOpacityFallback) / 100,
+      0,
+      1
+    );
+    tile.style.textColor = normalizeDrawioColor(styleMap.fontColor, tile.style.textColor || '#e5e7f0');
+    tile.style.fontSize = Math.max(8, Math.round(xmlNumber(styleMap.fontSize, tile.style.fontSize || 13)));
+    tile.style.padding = Math.max(0, Math.round(xmlNumber(styleMap.spacing, tile.style.padding || 16)));
+    tile.style.textAlign =
+      styleMap.align === 'center' || styleMap.align === 'right'
+        ? styleMap.align
+        : tile.style.textAlign || 'left';
+    if (styleMap.rounded === '1' || styleMap.rounded === 'true') {
+      const arcSize = xmlNumber(styleMap.arcSize, 12);
+      tile.style.borderRadius = Math.max(2, Math.round((Math.min(tile.width, tile.height) * arcSize) / 100));
+    } else if (styleMap.rounded === '0' || styleMap.rounded === 'false') {
+      tile.style.borderRadius = 0;
+    }
+
+    tiles.push(tile);
+  });
+
+  const computedWidth =
+    Math.max(
+      xmlNumber(graphModel.getAttribute('pageWidth'), 0),
+      ...tiles.map((tile) => tile.x + tile.width + 40),
+      1600
+    ) || 1600;
+  const computedHeight =
+    Math.max(
+      xmlNumber(graphModel.getAttribute('pageHeight'), 0),
+      ...tiles.map((tile) => tile.y + tile.height + 40),
+      1000
+    ) || 1000;
+  const title = diagramNode?.getAttribute('name') || 'Imported Draw.io';
+  return {
+    project: {
+      id: null,
+      name: title
+    },
+    canvas: {
+      width: Math.round(computedWidth),
+      height: Math.round(computedHeight),
+      background: '#0b0f14',
+      gridOpacity: 0.08,
+      gridSize: 12,
+      zoom: 1
+    },
+    tiles,
+    selectedTileId: tiles[0]?.id || null
+  };
+};
+
+const serializeStateToXml = (payload) => {
+  const doc = document.implementation.createDocument('', '', null);
+  const root = doc.createElement('mxfile');
+  root.setAttribute('host', 'app.diagrams.net');
+  root.setAttribute('modified', new Date().toISOString());
+  root.setAttribute('agent', 'Dashboard Studio V2');
+  root.setAttribute('version', '25.0.0');
+  root.setAttribute('type', 'device');
+  root.setAttribute('compressed', 'false');
+
+  const diagram = doc.createElement('diagram');
+  diagram.setAttribute('id', 'dashboard-v2');
+  diagram.setAttribute('name', sanitizeXmlString(payload?.project?.name || 'Dashboard'));
+  diagram.setAttribute('compressed', 'false');
+  diagram.setAttribute('dashboardState', encodeMetadataJson(payload || {}));
+
+  const graphModel = doc.createElement('mxGraphModel');
+  graphModel.setAttribute('dx', '1200');
+  graphModel.setAttribute('dy', '800');
+  graphModel.setAttribute('grid', '1');
+  graphModel.setAttribute('gridSize', '10');
+  graphModel.setAttribute('guides', '1');
+  graphModel.setAttribute('tooltips', '1');
+  graphModel.setAttribute('connect', '1');
+  graphModel.setAttribute('arrows', '1');
+  graphModel.setAttribute('fold', '1');
+  graphModel.setAttribute('page', '1');
+  graphModel.setAttribute('pageScale', '1');
+  graphModel.setAttribute('pageWidth', String(Math.round(xmlNumber(payload?.canvas?.width, 1600))));
+  graphModel.setAttribute('pageHeight', String(Math.round(xmlNumber(payload?.canvas?.height, 1000))));
+  graphModel.setAttribute('math', '0');
+  graphModel.setAttribute('shadow', '0');
+
+  const modelRoot = doc.createElement('root');
+  const cell0 = doc.createElement('mxCell');
+  cell0.setAttribute('id', '0');
+  modelRoot.appendChild(cell0);
+  const cell1 = doc.createElement('mxCell');
+  cell1.setAttribute('id', '1');
+  cell1.setAttribute('parent', '0');
+  modelRoot.appendChild(cell1);
+
+  const orderedTiles = Array.isArray(payload?.tiles)
+    ? payload.tiles
+        .slice()
+        .sort((left, right) => xmlNumber(left?.zIndex, 1) - xmlNumber(right?.zIndex, 1))
+    : [];
+
+  let nextCellId = 2;
+  const allocCellId = () => String(nextCellId++);
+
+  const appendVertexCell = ({
+    x,
+    y,
+    width,
+    height,
+    value = '',
+    style = '',
+    attrs = {},
+    parent = '1'
+  }) => {
+    const cell = doc.createElement('mxCell');
+    const id = allocCellId();
+    cell.setAttribute('id', id);
+    cell.setAttribute('vertex', '1');
+    cell.setAttribute('parent', parent);
+    cell.setAttribute('value', sanitizeXmlString(value));
+    cell.setAttribute('style', sanitizeXmlString(style));
+    Object.entries(attrs).forEach(([key, rawValue]) => {
+      if (rawValue === undefined || rawValue === null || rawValue === '') return;
+      cell.setAttribute(sanitizeXmlString(key), sanitizeXmlString(rawValue));
+    });
+
+    const geometry = doc.createElement('mxGeometry');
+    geometry.setAttribute('as', 'geometry');
+    geometry.setAttribute('x', String(Math.round(Math.max(0, xmlNumber(x, 0)))));
+    geometry.setAttribute('y', String(Math.round(Math.max(0, xmlNumber(y, 0)))));
+    geometry.setAttribute('width', String(Math.round(Math.max(1, xmlNumber(width, 1)))));
+    geometry.setAttribute('height', String(Math.round(Math.max(1, xmlNumber(height, 1)))));
+    cell.appendChild(geometry);
+    modelRoot.appendChild(cell);
+    return id;
+  };
+
+  const appendKpiParts = (tile, baseStyle) => {
+    const items = Array.isArray(tile?.data?.items) ? tile.data.items : [];
+    if (!items.length) return;
+    const padding = Math.max(8, Math.round(xmlNumber(baseStyle.padding, 16)));
+    const gap = 12;
+    const availableWidth = Math.max(1, xmlNumber(tile.width, 320) - padding * 2);
+    const cardWidth = Math.max(80, (availableWidth - gap * (items.length - 1)) / items.length);
+    const cardHeight = Math.max(48, xmlNumber(tile.height, 180) - padding * 2);
+    const defaultFill = normalizeDrawioColor(baseStyle.background, '#101723');
+    const defaultBorder = normalizeDrawioColor(baseStyle.border, '#1f2937');
+    const defaultText = normalizeDrawioColor(baseStyle.textColor, '#e6e7eb');
+
+    items.forEach((item, index) => {
+      const x = xmlNumber(tile.x, 0) + padding + index * (cardWidth + gap);
+      const y = xmlNumber(tile.y, 0) + padding;
+      const fillColor = normalizeDrawioColor(item?.fill, defaultFill);
+      const strokeColor = normalizeDrawioColor(item?.border, defaultBorder);
+      const fontColor = normalizeDrawioColor(
+        item?.textColor || item?.valueColor || item?.titleColor,
+        defaultText
+      );
+      const fontSize = Math.max(
+        9,
+        Math.round(xmlNumber(item?.valueSize, xmlNumber(baseStyle.fontSize, 13)))
+      );
+      const borderRadius = Math.max(0, xmlNumber(item?.radius, 10));
+      const value = [item?.title, item?.value, item?.delta]
+        .map((line) => (typeof line === 'string' ? line.trim() : ''))
+        .filter(Boolean)
+        .join('\n');
+      appendVertexCell({
+        x,
+        y,
+        width: cardWidth,
+        height: cardHeight,
+        value,
+        style: getDrawioPartStyle({
+          fillColor,
+          strokeColor,
+          strokeWidth: xmlNumber(item?.borderWidth, 1),
+          borderRadius,
+          width: cardWidth,
+          height: cardHeight,
+          fontColor,
+          fontFamily: baseStyle.fontFamily,
+          fontSize,
+          bold: xmlNumber(item?.valueWeight, 600) >= 600,
+          align: 'left',
+          verticalAlign: 'top',
+          spacing: 8
+        }),
+        attrs: {
+          dashboardRole: 'tile-part',
+          dashboardPartType: 'kpi-card',
+          dashboardParentTileId: tile?.id || ''
+        }
+      });
+    });
+  };
+
+  const appendDemographicParts = (tile, baseStyle) => {
+    const items = Array.isArray(tile?.data?.items) ? tile.data.items : [];
+    if (!items.length) return;
+    const padding = Math.max(8, Math.round(xmlNumber(baseStyle.padding, 16)));
+    const title = typeof tile?.data?.title === 'string' ? tile.data.title.trim() : '';
+    const titleHeight = title ? Math.max(24, Math.round(xmlNumber(baseStyle.fontSize, 13) + 14)) : 0;
+    const columns = Math.max(1, Math.min(5, items.length));
+    const rows = Math.max(1, Math.ceil(items.length / columns));
+    const gap = 12;
+    const availableWidth = Math.max(1, xmlNumber(tile.width, 320) - padding * 2);
+    const cardWidth = Math.max(70, (availableWidth - gap * (columns - 1)) / columns);
+    const availableHeight = Math.max(44, xmlNumber(tile.height, 180) - padding * 2 - titleHeight);
+    const cardHeight = Math.max(34, (availableHeight - gap * (rows - 1)) / rows);
+    const startY = xmlNumber(tile.y, 0) + padding + titleHeight;
+    const fillColor = normalizeDrawioColor(baseStyle.background, '#101723');
+    const strokeColor = normalizeDrawioColor(baseStyle.border, '#1f2937');
+    const fontColor = normalizeDrawioColor(baseStyle.textColor, '#e6e7eb');
+    const borderRadius = Math.max(0, xmlNumber(baseStyle.borderRadius, 10));
+
+    items.forEach((item, index) => {
+      const col = index % columns;
+      const row = Math.floor(index / columns);
+      const x = xmlNumber(tile.x, 0) + padding + col * (cardWidth + gap);
+      const y = startY + row * (cardHeight + gap);
+      const value = [item?.label, item?.value]
+        .map((line) => (typeof line === 'string' ? line.trim() : ''))
+        .filter(Boolean)
+        .join('\n');
+      appendVertexCell({
+        x,
+        y,
+        width: cardWidth,
+        height: cardHeight,
+        value,
+        style: getDrawioPartStyle({
+          fillColor,
+          strokeColor,
+          strokeWidth: Math.max(0, xmlNumber(baseStyle.borderWidth, 1)),
+          borderRadius,
+          width: cardWidth,
+          height: cardHeight,
+          fontColor,
+          fontFamily: baseStyle.fontFamily,
+          fontSize: Math.max(9, Math.round(xmlNumber(baseStyle.fontSize, 13))),
+          bold: true,
+          align: 'left',
+          verticalAlign: 'middle',
+          spacing: 8
+        }),
+        attrs: {
+          dashboardRole: 'tile-part',
+          dashboardPartType: 'demographic-card',
+          dashboardParentTileId: tile?.id || ''
+        }
+      });
+    });
+  };
+
+  const parseTableColumnWeight = (widthValue) => {
+    const text = String(widthValue || '1fr').trim();
+    const fr = text.match(/^([0-9]*\.?[0-9]+)\s*fr$/i);
+    if (fr) {
+      const parsed = Number(fr[1]);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+    }
+    const numeric = Number(text);
+    return Number.isFinite(numeric) && numeric > 0 ? numeric : 1;
+  };
+
+  const appendTableParts = (tile, baseStyle) => {
+    const data = tile?.data || {};
+    const rawColumns = Array.isArray(data.columns) ? data.columns : [];
+    const columns = rawColumns.length
+      ? rawColumns.map((column) =>
+          column && typeof column === 'object'
+            ? column
+            : { label: String(column ?? ''), align: 'left', width: '1fr' }
+        )
+      : [{ label: 'Value', align: 'left', width: '1fr' }];
+    const rows = Array.isArray(data.rows) ? data.rows : [];
+    const settings = data.settings && typeof data.settings === 'object' ? data.settings : {};
+    const showHeader = settings.showHeader !== false;
+    const striped = settings.striped !== false;
+    const padding = Math.max(8, Math.round(xmlNumber(baseStyle.padding, 16)));
+    const title = typeof data.title === 'string' ? data.title.trim() : '';
+    const titleHeight = title ? Math.max(24, Math.round(xmlNumber(baseStyle.fontSize, 13) + 16)) : 0;
+    const rowHeight = xmlClamp(Math.round(xmlNumber(settings.rowHeight, 36)), 20, 90);
+    const tableX = xmlNumber(tile.x, 0) + padding;
+    const tableY = xmlNumber(tile.y, 0) + padding + titleHeight;
+    const tableWidth = Math.max(60, xmlNumber(tile.width, 320) - padding * 2);
+    const tableHeight = Math.max(40, xmlNumber(tile.height, 180) - padding * 2 - titleHeight);
+    const headerRows = showHeader ? 1 : 0;
+    const capacity = Math.max(1, Math.floor(tableHeight / rowHeight) - headerRows);
+    const renderRows = rows.slice(0, capacity);
+    const weights = columns.map((column) => parseTableColumnWeight(column.width));
+    const totalWeight = weights.reduce((sum, value) => sum + value, 0) || 1;
+
+    const xOffsets = [];
+    let cursor = tableX;
+    weights.forEach((weight, index) => {
+      xOffsets.push(cursor);
+      const remaining = tableX + tableWidth - cursor;
+      if (index === weights.length - 1) {
+        cursor += remaining;
+      } else {
+        cursor += (tableWidth * weight) / totalWeight;
+      }
+    });
+
+    const drawRowCells = (cells, rowIndex, options = {}) => {
+      const y = tableY + rowIndex * rowHeight;
+      columns.forEach((column, colIndex) => {
+        const x = xOffsets[colIndex];
+        const nextX =
+          colIndex === columns.length - 1 ? tableX + tableWidth : xOffsets[colIndex + 1];
+        const width = Math.max(24, nextX - x);
+        const raw = cells[colIndex];
+        const value = String(raw ?? '').trim();
+        const align =
+          column.align === 'center' || column.align === 'right' ? column.align : 'left';
+        const baseFill = options.fillColor || normalizeDrawioColor(baseStyle.background, '#0f172a');
+        appendVertexCell({
+          x,
+          y,
+          width,
+          height: rowHeight,
+          value,
+          style: getDrawioPartStyle({
+            fillColor: baseFill,
+            strokeColor: normalizeDrawioColor(baseStyle.border, '#2b3445'),
+            strokeWidth: Math.max(0, xmlNumber(baseStyle.borderWidth, 1)),
+            borderRadius: 0,
+            width,
+            height: rowHeight,
+            fontColor: normalizeDrawioColor(baseStyle.textColor, '#e5e7f0'),
+            fontFamily: baseStyle.fontFamily,
+            fontSize: Math.max(8, Math.round(xmlNumber(baseStyle.fontSize, 12))),
+            bold: Boolean(options.bold),
+            align,
+            verticalAlign: 'middle',
+            spacing: 6
+          }),
+          attrs: {
+            dashboardRole: 'tile-part',
+            dashboardPartType: options.partType || 'table-cell',
+            dashboardParentTileId: tile?.id || ''
+          }
+        });
+      });
+    };
+
+    let rowCursor = 0;
+    if (showHeader) {
+      drawRowCells(
+        columns.map((column) => String(column.label || '').trim()),
+        rowCursor,
+        {
+          bold: true,
+          partType: 'table-header-cell',
+          fillColor: normalizeDrawioColor(baseStyle.border, '#1f2937')
+        }
+      );
+      rowCursor += 1;
+    }
+
+    renderRows.forEach((row, rowIndex) => {
+      const normalizedRow = Array.isArray(row) ? row : [];
+      const fillColor =
+        striped && rowIndex % 2 === 1
+          ? normalizeDrawioColor(baseStyle.background, '#0f172a')
+          : normalizeDrawioColor(baseStyle.background, '#111827');
+      drawRowCells(normalizedRow, rowCursor + rowIndex, {
+        partType: 'table-cell',
+        fillColor
+      });
+    });
+  };
+
+  orderedTiles.forEach((tile, index) => {
+    if (!tile || typeof tile !== 'object') return;
+    const rootId = appendVertexCell({
+      x: xmlNumber(tile?.x, 0),
+      y: xmlNumber(tile?.y, 0),
+      width: Math.max(40, xmlNumber(tile?.width, 320)),
+      height: Math.max(40, xmlNumber(tile?.height, 180)),
+      value: getTileLabelForDrawio(tile),
+      style: getDrawioTileStyle(tile),
+      attrs: {
+        tileId: String(tile?.id || `tile-${index + 1}`),
+        tileType: String(tile?.type || 'big-stat'),
+        tileZIndex: String(xmlNumber(tile?.zIndex, index + 1)),
+        dashboardTile: encodeMetadataJson(tile || {}),
+        dashboardRole: 'tile-root'
+      }
+    });
+
+    const baseStyle = getTileStyle(tile);
+    if (tile.type === 'kpi-row') {
+      appendKpiParts(tile, baseStyle);
+    } else if (tile.type === 'demographics') {
+      appendDemographicParts(tile, baseStyle);
+    } else if (tile.type === 'table') {
+      appendTableParts(tile, baseStyle);
+    }
+
+    void rootId;
+  });
+
+  graphModel.appendChild(modelRoot);
+  diagram.appendChild(graphModel);
+  root.appendChild(diagram);
+  doc.appendChild(root);
+  const serializer = new XMLSerializer();
+  return `<?xml version="1.0" encoding="UTF-8"?>\n${serializer.serializeToString(doc)}`;
+};
+
+const parseXmlToState = (xmlText) => {
+  const source = (xmlText || '').trim();
+  if (!source) {
+    throw new Error('Paste XML into the field before importing.');
+  }
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(source, 'application/xml');
+  const parserError = doc.querySelector('parsererror');
+  if (parserError) {
+    throw new Error('Invalid XML. Please fix the XML and try again.');
+  }
+
+  const root = doc.documentElement;
+  if (!root) {
+    throw new Error('Invalid XML. Root element is missing.');
+  }
+
+  const drawioState = parseDrawioXmlToState(doc);
+  if (drawioState) return drawioState;
+
+  let valueNode = null;
+  if (root.nodeName === 'dashboard-studio' || root.nodeName === 'dashboardStudio') {
+    const stateNode = Array.from(root.children).find((child) => child.nodeName === 'state');
+    valueNode = stateNode ? getFirstElementChild(stateNode) : getFirstElementChild(root);
+  } else if (root.nodeName === 'state' || root.nodeName === 'value') {
+    valueNode = root.nodeName === 'state' ? getFirstElementChild(root) : root;
+  } else {
+    valueNode = root;
+  }
+
+  const decoded = decodeXmlValue(valueNode || root);
+  if (!decoded || typeof decoded !== 'object' || Array.isArray(decoded)) {
+    throw new Error('Imported XML must decode to a workspace object.');
+  }
+  return decoded;
+};
+
 const updateUndoRedoButtons = () => {
   if (undoBtn) undoBtn.disabled = historyIndex <= 0;
   if (redoBtn) redoBtn.disabled = historyIndex >= history.length - 1;
@@ -151,6 +1101,7 @@ const formatDate = (value) => {
 
 const renderProjectList = (projects = []) => {
   if (!projectList) return;
+  projectCache = Array.isArray(projects) ? projects.slice() : [];
   projectList.innerHTML = '';
   projects.forEach((project) => {
     const button = document.createElement('button');
@@ -341,6 +1292,23 @@ const updateProjectNameDisplay = () => {
   updateProjectNameLabel();
   updateProjectListSelection();
   updateActiveProjectItemName(name);
+};
+
+const getUniqueProjectCopyName = (baseName) => {
+  const normalizedBase = (baseName || DEFAULT_PROJECT_NAME).trim() || DEFAULT_PROJECT_NAME;
+  const copyBase = normalizedBase.toLowerCase().endsWith(' copy') ? normalizedBase : `${normalizedBase} Copy`;
+  const existingNames = new Set(
+    projectCache
+      .map((project) => (project?.name || '').trim().toLowerCase())
+      .filter(Boolean)
+  );
+  let candidate = copyBase;
+  let suffix = 2;
+  while (existingNames.has(candidate.toLowerCase())) {
+    candidate = `${copyBase} ${suffix}`;
+    suffix += 1;
+  }
+  return candidate;
 };
 
 const clampGridSize = (value) => {
@@ -717,6 +1685,220 @@ const snap = (value) => {
 const generateId = () => `tile-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+const getTileBounds = (tiles = []) => {
+  const validTiles = tiles.filter((tile) => tile && typeof tile === 'object');
+  if (!validTiles.length) return null;
+  return validTiles.reduce(
+    (bounds, tile) => ({
+      minX: Math.min(bounds.minX, Number(tile.x) || 0),
+      minY: Math.min(bounds.minY, Number(tile.y) || 0),
+      maxX: Math.max(bounds.maxX, (Number(tile.x) || 0) + (Number(tile.width) || MIN_TILE_WIDTH)),
+      maxY: Math.max(bounds.maxY, (Number(tile.y) || 0) + (Number(tile.height) || MIN_TILE_HEIGHT))
+    }),
+    {
+      minX: Number.POSITIVE_INFINITY,
+      minY: Number.POSITIVE_INFINITY,
+      maxX: Number.NEGATIVE_INFINITY,
+      maxY: Number.NEGATIVE_INFINITY
+    }
+  );
+};
+
+const cloneTilesForMerge = (tiles = []) =>
+  tiles
+    .filter((tile) => tile && typeof tile === 'object' && typeof tile.type === 'string')
+    .map((tile, index) => {
+      const clone = deepClone(tile);
+      clone.id = generateId();
+      clone.x = Number.isFinite(Number(clone.x)) ? Number(clone.x) : 80 + index * 24;
+      clone.y = Number.isFinite(Number(clone.y)) ? Number(clone.y) : 80 + index * 24;
+      clone.width = Number.isFinite(Number(clone.width)) ? Number(clone.width) : MIN_TILE_WIDTH;
+      clone.height = Number.isFinite(Number(clone.height)) ? Number(clone.height) : MIN_TILE_HEIGHT;
+      if (!clone.data || typeof clone.data !== 'object' || Array.isArray(clone.data)) {
+        clone.data = {};
+      }
+      if (!clone.style || typeof clone.style !== 'object' || Array.isArray(clone.style)) {
+        clone.style = {};
+      }
+      return clone;
+    });
+
+const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value || {}, key);
+
+const assignOwnFields = (target, source, keys = []) => {
+  keys.forEach((key) => {
+    if (hasOwn(source, key)) {
+      target[key] = deepClone(source[key]);
+    }
+  });
+};
+
+const mergeGraphicFields = (target, source) => {
+  assignOwnFields(target, source, ['icon', 'imageUrl', 'imageFit', 'imageOpacity']);
+};
+
+const normalizeTableColumn = (column, fallback = {}) => {
+  const base = column && typeof column === 'object' && !Array.isArray(column) ? column : {};
+  return {
+    label: String(base.label ?? (typeof column === 'string' ? column : fallback.label ?? '')),
+    align: base.align || fallback.align || 'left',
+    width: base.width || fallback.width || '1fr'
+  };
+};
+
+const mergeTileDataContent = (currentTile, importedTile) => {
+  const currentData =
+    currentTile?.data && typeof currentTile.data === 'object' && !Array.isArray(currentTile.data)
+      ? currentTile.data
+      : {};
+  const incomingData =
+    importedTile?.data && typeof importedTile.data === 'object' && !Array.isArray(importedTile.data)
+      ? importedTile.data
+      : {};
+  const nextData = deepClone(currentData);
+  mergeGraphicFields(nextData, incomingData);
+
+  switch (currentTile.type) {
+    case 'kpi-row': {
+      if (!hasOwn(incomingData, 'items')) break;
+      const currentItems = Array.isArray(currentData.items) ? currentData.items : [];
+      const fallbackTemplate = deepClone(
+        currentItems[currentItems.length - 1] || DEFAULT_TILES['kpi-row']?.data?.items?.[0] || {}
+      );
+      const incomingItems = Array.isArray(incomingData.items) ? incomingData.items : [];
+      nextData.items = incomingItems.map((incomingItem, index) => {
+        const base = deepClone(currentItems[index] || currentItems[currentItems.length - 1] || fallbackTemplate);
+        const safeItem =
+          incomingItem && typeof incomingItem === 'object' && !Array.isArray(incomingItem) ? incomingItem : {};
+        if (hasOwn(safeItem, 'title')) base.title = String(safeItem.title ?? '');
+        if (hasOwn(safeItem, 'value')) base.value = String(safeItem.value ?? '');
+        if (hasOwn(safeItem, 'delta')) base.delta = String(safeItem.delta ?? '');
+        return base;
+      });
+      break;
+    }
+    case 'big-stat': {
+      assignOwnFields(nextData, incomingData, ['header', 'label', 'value']);
+      break;
+    }
+    case 'highlights': {
+      assignOwnFields(nextData, incomingData, ['title']);
+      if (hasOwn(incomingData, 'items')) {
+        nextData.items = Array.isArray(incomingData.items)
+          ? incomingData.items.map((item) => String(item ?? ''))
+          : [];
+      }
+      break;
+    }
+    case 'blogs': {
+      assignOwnFields(nextData, incomingData, ['title', 'subtitle']);
+      if (hasOwn(incomingData, 'items')) {
+        const currentItems = Array.isArray(currentData.items) ? currentData.items : [];
+        const incomingItems = Array.isArray(incomingData.items) ? incomingData.items : [];
+        nextData.items = incomingItems.map((incomingItem, index) => {
+          const base = deepClone(currentItems[index] || {});
+          const safeItem =
+            incomingItem && typeof incomingItem === 'object' && !Array.isArray(incomingItem) ? incomingItem : {};
+          if (hasOwn(safeItem, 'title')) base.title = String(safeItem.title ?? '');
+          if (hasOwn(safeItem, 'views')) base.views = String(safeItem.views ?? '');
+          return base;
+        });
+      }
+      break;
+    }
+    case 'graph': {
+      assignOwnFields(nextData, incomingData, ['title', 'subtitle', 'points', 'xAxis']);
+      if (hasOwn(incomingData, 'yAxis')) {
+        nextData.yAxis = {
+          ...(currentData.yAxis || {}),
+          ...deepClone(incomingData.yAxis || {})
+        };
+      }
+      if (hasOwn(currentData, 'style')) {
+        nextData.style = deepClone(currentData.style);
+      }
+      break;
+    }
+    case 'demographics': {
+      assignOwnFields(nextData, incomingData, ['title']);
+      if (hasOwn(incomingData, 'items')) {
+        const currentItems = Array.isArray(currentData.items) ? currentData.items : [];
+        const incomingItems = Array.isArray(incomingData.items) ? incomingData.items : [];
+        nextData.items = incomingItems.map((incomingItem, index) => {
+          const base = deepClone(currentItems[index] || {});
+          const safeItem =
+            incomingItem && typeof incomingItem === 'object' && !Array.isArray(incomingItem) ? incomingItem : {};
+          if (hasOwn(safeItem, 'label')) base.label = String(safeItem.label ?? '');
+          if (hasOwn(safeItem, 'value')) base.value = String(safeItem.value ?? '');
+          return base;
+        });
+      }
+      break;
+    }
+    case 'table': {
+      assignOwnFields(nextData, incomingData, ['title']);
+      if (hasOwn(incomingData, 'columns')) {
+        const currentColumns = Array.isArray(currentData.columns) ? currentData.columns.map((column) => normalizeTableColumn(column)) : [];
+        const fallbackColumn = currentColumns[currentColumns.length - 1] || normalizeTableColumn({});
+        const incomingColumns = Array.isArray(incomingData.columns) ? incomingData.columns : [];
+        nextData.columns = incomingColumns.map((column, index) => {
+          const base = normalizeTableColumn(currentColumns[index], fallbackColumn);
+          if (column && typeof column === 'object' && !Array.isArray(column)) {
+            return {
+              ...base,
+              label: hasOwn(column, 'label') ? String(column.label ?? '') : base.label
+            };
+          }
+          return {
+            ...base,
+            label: String(column ?? '')
+          };
+        });
+      }
+      if (hasOwn(incomingData, 'rows')) {
+        nextData.rows = Array.isArray(incomingData.rows) ? deepClone(incomingData.rows) : [];
+      }
+      if (hasOwn(currentData, 'settings')) {
+        nextData.settings = deepClone(currentData.settings);
+      }
+      break;
+    }
+    default: {
+      Object.entries(incomingData).forEach(([key, value]) => {
+        if (key === 'style') return;
+        nextData[key] = deepClone(value);
+      });
+      if (hasOwn(currentData, 'style')) {
+        nextData.style = deepClone(currentData.style);
+      }
+      break;
+    }
+  }
+
+  return nextData;
+};
+
+const findMatchingTileForDataReplace = (importedTile, currentTiles, usedTileIds, typeQueues) => {
+  if (!importedTile || typeof importedTile !== 'object') return null;
+  if (importedTile.id) {
+    const exactMatch = currentTiles.find(
+      (tile) =>
+        tile.id === importedTile.id &&
+        !usedTileIds.has(tile.id) &&
+        (!importedTile.type || tile.type === importedTile.type)
+    );
+    if (exactMatch) return exactMatch;
+  }
+
+  if (!importedTile.type) return null;
+  const queue = typeQueues.get(importedTile.type) || [];
+  while (queue.length) {
+    const candidate = queue.shift();
+    if (!usedTileIds.has(candidate.id)) return candidate;
+  }
+  return null;
+};
 
 const getCanvasPointer = (event) => {
   const rect = canvasContent.getBoundingClientRect();
@@ -1376,7 +2558,8 @@ const renderTileContent = (tile) => {
                       .map((col, idx) => {
                         const label = typeof col === 'object' ? col.label : col;
                         const align = typeof col === 'object' ? col.align || 'left' : 'left';
-                        return `<div class="table-cell align-${align} editable" contenteditable data-field="columns.${idx}.label">${label}</div>`;
+                        const wrapClass = align === 'left' && idx === 0 ? 'wrap' : 'nowrap';
+                        return `<div class="table-cell ${wrapClass} align-${align} editable" contenteditable data-field="columns.${idx}.label">${label}</div>`;
                       })
                       .join('')}
                   </div>`
@@ -1391,7 +2574,8 @@ const renderTileContent = (tile) => {
                     const align = columns[cellIdx] && typeof columns[cellIdx] === 'object'
                       ? columns[cellIdx].align || 'left'
                       : 'left';
-                    return `<div class="table-cell align-${align} editable" contenteditable data-field="rows.${rowIdx}.${cellIdx}">${cell}</div>`;
+                    const wrapClass = align === 'left' && cellIdx === 0 ? 'wrap' : 'nowrap';
+                    return `<div class="table-cell ${wrapClass} align-${align} editable" contenteditable data-field="rows.${rowIdx}.${cellIdx}">${cell}</div>`;
                   })
                   .join('')}
               </div>
@@ -2094,6 +3278,96 @@ const attachLibraryHandlers = () => {
   });
 };
 
+const applyImportedWorkspace = (next, historyLabel = 'Import') => {
+  if (!next || typeof next !== 'object' || Array.isArray(next)) {
+    throw new Error('Imported payload must be an object.');
+  }
+  replaceState(next);
+  if (state.project?.id) {
+    localStorage.setItem(STORAGE_KEYS.projectId, String(state.project.id));
+  } else {
+    localStorage.removeItem(STORAGE_KEYS.projectId);
+  }
+  localStorage.setItem(STORAGE_KEYS.gridSize, String(getGridSize()));
+  render();
+  updateProjectNameDisplay();
+  history = [];
+  historyIndex = -1;
+  pushHistory(historyLabel);
+  updateUndoRedoButtons();
+  updateHistoryMenu();
+};
+
+const replaceImportedTileData = (next, historyLabel = 'Replace Data') => {
+  if (!next || typeof next !== 'object' || Array.isArray(next)) {
+    throw new Error('Imported payload must be an object.');
+  }
+  const importedTiles = Array.isArray(next.tiles) ? next.tiles : [];
+  if (!importedTiles.length) {
+    throw new Error('Replace Data requires a JSON object with a tiles array.');
+  }
+
+  const typeQueues = new Map();
+  state.tiles.forEach((tile) => {
+    if (!typeQueues.has(tile.type)) {
+      typeQueues.set(tile.type, []);
+    }
+    typeQueues.get(tile.type).push(tile);
+  });
+
+  const usedTileIds = new Set();
+  let matchedCount = 0;
+
+  importedTiles.forEach((importedTile) => {
+    const targetTile = findMatchingTileForDataReplace(importedTile, state.tiles, usedTileIds, typeQueues);
+    if (!targetTile) return;
+    targetTile.data = mergeTileDataContent(targetTile, importedTile);
+    usedTileIds.add(targetTile.id);
+    matchedCount += 1;
+  });
+
+  if (!matchedCount) {
+    throw new Error('No imported tiles matched the current project. Use existing tile ids or matching tile types.');
+  }
+
+  render();
+  updateProjectNameDisplay();
+  pushHistory(historyLabel);
+
+  if (matchedCount < importedTiles.length) {
+    console.warn(`Replace Data skipped ${importedTiles.length - matchedCount} unmatched tile(s).`);
+  }
+};
+
+const mergeImportedWorkspace = (next, historyLabel = 'Merge Import') => {
+  if (!next || typeof next !== 'object' || Array.isArray(next)) {
+    throw new Error('Imported payload must be an object.');
+  }
+  const imported = normalizeState(next);
+  const incomingTiles = cloneTilesForMerge(imported.tiles);
+  if (!incomingTiles.length) {
+    throw new Error('Imported workspace does not contain any tiles to add.');
+  }
+
+  const currentBounds = getTileBounds(state.tiles);
+  const incomingBounds = getTileBounds(incomingTiles);
+  if (currentBounds && incomingBounds) {
+    const gap = Math.max(32, getGridSize() * 3);
+    const offsetX = currentBounds.maxX - incomingBounds.minX + gap;
+    const offsetY = currentBounds.minY - incomingBounds.minY;
+    incomingTiles.forEach((tile) => {
+      tile.x += offsetX;
+      tile.y += offsetY;
+    });
+  }
+
+  state.tiles = state.tiles.concat(incomingTiles);
+  state.selectedTileId = incomingTiles[incomingTiles.length - 1].id;
+  render();
+  updateProjectNameDisplay();
+  pushHistory(historyLabel);
+};
+
 const attachJsonHandlers = () => {
   if (jsonExportBtn) {
     jsonExportBtn.addEventListener('click', () => {
@@ -2110,24 +3384,69 @@ const attachJsonHandlers = () => {
       }
       try {
         const next = JSON.parse(jsonInput.value);
-        if (next && typeof next === 'object') {
-          replaceState(next);
-          if (state.project?.id) {
-            localStorage.setItem(STORAGE_KEYS.projectId, String(state.project.id));
-          } else {
-            localStorage.removeItem(STORAGE_KEYS.projectId);
-          }
-          localStorage.setItem(STORAGE_KEYS.gridSize, String(getGridSize()));
-          render();
-          history = [];
-          historyIndex = -1;
-          pushHistory('Import JSON');
-          updateUndoRedoButtons();
-          updateHistoryMenu();
-        }
+        applyImportedWorkspace(next, 'Import JSON');
       } catch (err) {
         console.error('Invalid JSON', err);
         alert('Invalid JSON. Please fix the JSON and try again.');
+      }
+    });
+  }
+  if (jsonImportDataBtn) {
+    jsonImportDataBtn.addEventListener('click', () => {
+      if (!jsonInput || !jsonInput.value.trim()) {
+        alert('Paste JSON into the field before importing.');
+        return;
+      }
+      try {
+        const next = JSON.parse(jsonInput.value);
+        replaceImportedTileData(next, 'Replace Data');
+      } catch (err) {
+        console.error('Invalid JSON', err);
+        alert(err?.message || 'Invalid JSON. Please fix the JSON and try again.');
+      }
+    });
+  }
+  if (jsonImportMergeBtn) {
+    jsonImportMergeBtn.addEventListener('click', () => {
+      if (!jsonInput || !jsonInput.value.trim()) {
+        alert('Paste JSON into the field before importing.');
+        return;
+      }
+      try {
+        const next = JSON.parse(jsonInput.value);
+        mergeImportedWorkspace(next, 'Merge JSON');
+      } catch (err) {
+        console.error('Invalid JSON', err);
+        alert(err?.message || 'Invalid JSON. Please fix the JSON and try again.');
+      }
+    });
+  }
+
+  if (xmlExportBtn) {
+    xmlExportBtn.addEventListener('click', () => {
+      try {
+        const payload = serializeStateToXml(state);
+        if (xmlInput) xmlInput.value = payload;
+        downloadXml(payload);
+      } catch (err) {
+        console.error('XML export failed', err);
+        alert('XML export failed. Check console for details.');
+      }
+    });
+  }
+
+  if (xmlImportBtn) {
+    xmlImportBtn.addEventListener('click', () => {
+      if (!xmlInput || !xmlInput.value.trim()) {
+        alert('Paste XML into the field before importing.');
+        return;
+      }
+      try {
+        const next = parseXmlToState(xmlInput.value);
+        applyImportedWorkspace(next, 'Import XML');
+      } catch (err) {
+        console.error('Invalid XML', err);
+        alert(err?.message || 'Invalid XML. Please fix the XML and try again.');
       }
     });
   }
@@ -2255,6 +3574,89 @@ const saveProject = async () => {
   }
 };
 
+const duplicateCurrentProject = async () => {
+  const copyName = getUniqueProjectCopyName(getProjectName(true));
+  const snapshot = deepClone(state);
+  snapshot.project = {
+    ...DEFAULT_STATE.project,
+    ...(snapshot.project || {}),
+    id: null,
+    name: copyName
+  };
+
+  if (window.location.protocol === 'file:') {
+    replaceState(snapshot);
+    localStorage.removeItem(STORAGE_KEYS.projectId);
+    render();
+    history = [];
+    historyIndex = -1;
+    pushHistory('Copy Project');
+    updateUndoRedoButtons();
+    updateHistoryMenu();
+    updateProjectNameDisplay();
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: null,
+        name: copyName,
+        data: snapshot
+      })
+    });
+    const payload = await res.json();
+    if (!res.ok) {
+      throw new Error(payload?.error || 'Copy failed');
+    }
+    replaceState(snapshot);
+    state.project = state.project || {};
+    state.project.id = payload.id;
+    state.project.name = copyName;
+    localStorage.setItem(STORAGE_KEYS.projectId, String(payload.id));
+    render();
+    history = [];
+    historyIndex = -1;
+    pushHistory('Copy Project');
+    updateUndoRedoButtons();
+    updateHistoryMenu();
+    updateProjectNameDisplay();
+    await loadProjectList();
+  } catch (err) {
+    alert(`Copy failed: ${err.message}`);
+  }
+};
+
+const deleteCurrentProject = async () => {
+  const projectId = state.project?.id;
+  const projectName = getProjectName(true);
+  const confirmed = window.confirm(
+    projectId
+      ? `Delete "${projectName}"? This removes it from saved projects.`
+      : `Discard "${projectName}" and start a blank project?`
+  );
+  if (!confirmed) return;
+
+  if (!projectId || window.location.protocol === 'file:') {
+    createNewProject();
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/projects/${projectId}`, { method: 'DELETE' });
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(payload?.error || 'Delete failed');
+    }
+    createNewProject();
+    await loadProjectList();
+  } catch (err) {
+    alert(`Delete failed: ${err.message}`);
+  }
+};
+
 const sanitizeFilename = (value) =>
   (value || 'dashboard')
     .toLowerCase()
@@ -2268,6 +3670,19 @@ const downloadJson = (payload) => {
   const link = document.createElement('a');
   link.href = url;
   link.download = `${name}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+};
+
+const downloadXml = (payload) => {
+  const name = sanitizeFilename(state.project?.name || 'dashboard');
+  const blob = new Blob([payload], { type: 'application/xml' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${name}.xml`;
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -2469,6 +3884,16 @@ const boot = async () => {
         downloadJson(payload);
         return;
       }
+      if (format === 'xml') {
+        try {
+          const payload = serializeStateToXml(state);
+          downloadXml(payload);
+        } catch (err) {
+          console.error('XML export failed', err);
+          alert('XML export failed. Check console for details.');
+        }
+        return;
+      }
       const exportFormat = format === 'pdf' ? 'pdf' : format === 'png4k' ? 'png4k' : 'png';
       exportFromServer(exportFormat);
     });
@@ -2515,6 +3940,18 @@ const boot = async () => {
   if (saveBtn) {
     saveBtn.addEventListener('click', () => {
       saveProject();
+    });
+  }
+
+  if (copyProjectBtn) {
+    copyProjectBtn.addEventListener('click', () => {
+      duplicateCurrentProject();
+    });
+  }
+
+  if (deleteProjectBtn) {
+    deleteProjectBtn.addEventListener('click', () => {
+      deleteCurrentProject();
     });
   }
 

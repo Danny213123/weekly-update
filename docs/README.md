@@ -2,6 +2,8 @@
 
 This app now runs as a fullstack service with an Express API, SQLite persistence, and the existing dashboard UIs served from the backend. Node.js 18+ is recommended (Node 20 LTS tends to work best with `better-sqlite3`).
 
+Project npm scripts automatically prefer Homebrew Node 20 when it is installed at `/opt/homebrew/opt/node@20/bin/node` or `/usr/local/opt/node@20/bin/node`.
+
 ## Quick Start
 
 1. Install dependencies
@@ -51,14 +53,14 @@ npm run cli
 Examples:
 
 ```bash
-dashboard-studio list
-dashboard-studio history --type monthly
-dashboard-studio export-json --type monthly --out exports/monthly.json
-dashboard-studio import-json --type yearly --file public/json-template.yearly.json --save-version
-dashboard-studio export-png --type monthly --out exports/monthly.png
-dashboard-studio build
-dashboard-studio launch --open
-dashboard-studio quick-launch --open
+npm run cli -- list
+npm run cli -- history --type monthly
+npm run cli -- export-json --type monthly --out exports/monthly.json
+npm run cli -- import-json --type yearly --file public/json-template.yearly.json --save-version
+npm run cli -- export-png --type monthly --out exports/monthly.png
+npm run build
+npm run cli -- launch --open
+npm run cli -- quick-launch --open
 ```
 
 ## Export Output

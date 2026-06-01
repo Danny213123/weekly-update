@@ -63,9 +63,16 @@ class Spinner {
         this.frames = ['-', '\\\\', '|', '/'];
         this.frameIndex = 0;
         this.interval = null;
+        this.isInteractive = Boolean(process.stdout.isTTY)
+            && typeof process.stdout.clearLine === 'function'
+            && typeof process.stdout.cursorTo === 'function';
     }
 
     start() {
+        if (!this.isInteractive) {
+            console.log(`${colors.cyan}...${colors.reset} ${this.message}`);
+            return;
+        }
         process.stdout.write(`${colors.cyan}${this.frames[0]}${colors.reset} ${this.message}`);
         this.interval = setInterval(() => {
             this.frameIndex = (this.frameIndex + 1) % this.frames.length;
@@ -80,8 +87,10 @@ class Spinner {
             clearInterval(this.interval);
             this.interval = null;
         }
-        process.stdout.clearLine(0);
-        process.stdout.cursorTo(0);
+        if (this.isInteractive) {
+            process.stdout.clearLine(0);
+            process.stdout.cursorTo(0);
+        }
         if (success) {
             console.log(`${colors.green}[OK]${colors.reset} ${this.message}`);
         } else {
@@ -590,7 +599,7 @@ async function handleLaunchSite(options = {}) {
     log('Press Ctrl+C to stop the server.', colors.dim);
 
     const env = { ...process.env, PORT: String(port), HOST: host };
-    const child = spawn('node', [path.join(rootDir, 'src', 'server.js')], {
+    const child = spawn(process.execPath, [path.join(rootDir, 'src', 'server.js')], {
         stdio: 'inherit',
         env
     });
